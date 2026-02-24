@@ -174,6 +174,7 @@ class MapillaryClient:
         semaphore = asyncio.Semaphore(concurrency)
         total = len(image_records)
         completed = 0
+        skipped_existing = 0
         failed = 0
         lock = asyncio.Lock()
         log_every = max(1, total // 20)
@@ -190,17 +191,35 @@ class MapillaryClient:
                     if done % log_every == 0 or done == total:
                         elapsed = time.perf_counter() - started
                         logger.info(
-                            "Download progress {}/{} ({:.1f}%) failed={} elapsed={:.1f}s",
+                                "Download progress {}/{} ({:.1f}%) failed={} elapsed={:.1f}s",
+                                done,
+                                total,
+                                (done / max(1, total)) * 100.0,
+                                failed,
+                                elapsed,
+                            )
+                return
+            dest_path = dest_dir / f"{image_id}.jpg"
+            if dest_path.exists():
+                async with lock:
+                    skipped_existing += 1
+                    done = completed + failed + skipped_existing
+                    if done % log_every == 0 or done == total:
+                        elapsed = time.perf_counter() - started
+                        logger.info(
+                            "Download progress {}/{} ({:.1f}%) downloaded={} skipped_existing={} failed={} elapsed={:.1f}s",
                             done,
                             total,
                             (done / max(1, total)) * 100.0,
+                            completed,
+                            skipped_existing,
                             failed,
                             elapsed,
                         )
                 return
             async with semaphore:
                 try:
-                    await self.download_image(thumb_url, dest_dir / f"{image_id}.jpg")
+                    await self.download_image(thumb_url, dest_path)
                     async with lock:
                         completed += 1
                 except httpx.HTTPError:
@@ -208,14 +227,16 @@ class MapillaryClient:
                         failed += 1
                 finally:
                     async with lock:
-                        done = completed + failed
+                        done = completed + failed + skipped_existing
                         if done % log_every == 0 or done == total:
                             elapsed = time.perf_counter() - started
                             logger.info(
-                                "Download progress {}/{} ({:.1f}%) failed={} elapsed={:.1f}s",
+                                "Download progress {}/{} ({:.1f}%) downloaded={} skipped_existing={} failed={} elapsed={:.1f}s",
                                 done,
                                 total,
                                 (done / max(1, total)) * 100.0,
+                                completed,
+                                skipped_existing,
                                 failed,
                                 elapsed,
                             )
@@ -224,8 +245,9 @@ class MapillaryClient:
         await asyncio.gather(*[_worker(record) for record in image_records])
         elapsed = time.perf_counter() - started
         logger.info(
-            "Finished image download batch completed={} failed={} total={} elapsed={:.1f}s",
+            "Finished image download batch downloaded={} skipped_existing={} failed={} total={} elapsed={:.1f}s",
             completed,
+            skipped_existing,
             failed,
             total,
             elapsed,

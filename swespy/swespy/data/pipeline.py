@@ -203,6 +203,9 @@ class DataPipeline:
             return True
 
         cleaned = df[df["local_path"].apply(keep_row)].copy()
+        if "s2_cell" not in cleaned.columns and {"lat", "lng"}.issubset(cleaned.columns):
+            logger.warning("s2_cell missing after cleaning; reassigning from lat/lng")
+            cleaned = assign_cells_to_dataframe(cleaned, level=self.settings.s2_cell_level)
         logger.info("Cleaned dataset size: {}", len(cleaned))
         return cleaned
 
@@ -218,6 +221,9 @@ class DataPipeline:
             return df
 
         cleaned = self._clean_small_files(df)
+        if "s2_cell" not in cleaned.columns and {"lat", "lng"}.issubset(cleaned.columns):
+            logger.warning("s2_cell missing before save; reassigning from lat/lng")
+            cleaned = assign_cells_to_dataframe(cleaned, level=self.settings.s2_cell_level)
         output = cleaned[["image_id", "lat", "lng", "s2_cell", "local_path"]]
         out_path = self.meta_dir / "images.parquet"
         output.to_parquet(out_path, index=False)
