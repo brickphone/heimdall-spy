@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+import time
 
 import httpx
 import pandas as pd
@@ -27,6 +28,24 @@ class DataPipeline:
         min_lon, min_lat, max_lon, max_lat = bbox
         divisions_lon = self.settings.bbox_grid_lon_divisions
         divisions_lat = self.settings.bbox_grid_lat_divisions
+
+        width = max_lon - min_lon
+        height = max_lat - min_lat
+        total_area = width * height
+        tile_area = total_area / max(1, divisions_lon * divisions_lat)
+        max_tile_area = self.settings.mapillary_max_bbox_area_sqdeg
+
+        if tile_area > max_tile_area:
+            scale = (tile_area / max_tile_area) ** 0.5
+            divisions_lon = max(divisions_lon, int(divisions_lon * scale) + 1)
+            divisions_lat = max(divisions_lat, int(divisions_lat * scale) + 1)
+            logger.warning(
+                "Increasing grid to {}x{} so each bbox area <= {:.3f} sqdeg (Mapillary limit).",
+                divisions_lon,
+                divisions_lat,
+                max_tile_area,
+            )
+
         step_lon = (max_lon - min_lon) / divisions_lon
         step_lat = (max_lat - min_lat) / divisions_lat
         sub_boxes: list[tuple[float, float, float, float]] = []
@@ -38,6 +57,13 @@ class DataPipeline:
                 sub_min_lat = min_lat + j * step_lat
                 sub_max_lat = min_lat + (j + 1) * step_lat
                 sub_boxes.append((sub_min_lon, sub_min_lat, sub_max_lon, sub_max_lat))
+        logger.info(
+            "Generated {} sub-bboxes ({}x{}), approx tile area={:.4f} sqdeg",
+            len(sub_boxes),
+            divisions_lon,
+            divisions_lat,
+            step_lon * step_lat,
+        )
         return sub_boxes
 
     @staticmethod
@@ -60,22 +86,80 @@ class DataPipeline:
             )
         return rows
 
+    @staticmethod
+    def _split_bbox(bbox: tuple[float, float, float, float]) -> list[tuple[float, float, float, float]]:
+        """Split one bbox into 4 smaller quadrants."""
+        min_lon, min_lat, max_lon, max_lat = bbox
+        mid_lon = (min_lon + max_lon) / 2.0
+        mid_lat = (min_lat + max_lat) / 2.0
+        return [
+            (min_lon, min_lat, mid_lon, mid_lat),
+            (mid_lon, min_lat, max_lon, mid_lat),
+            (min_lon, mid_lat, mid_lon, max_lat),
+            (mid_lon, mid_lat, max_lon, max_lat),
+        ]
+
+    async def _search_bbox_with_fallback(
+        self,
+        mapillary: MapillaryClient,
+        bbox: tuple[float, float, float, float],
+        limit: int,
+        depth: int = 0,
+        max_depth: int = 2,
+    ) -> list[dict]:
+        """Search a bbox and recursively split on repeated API failures."""
+        try:
+            return await mapillary.search_images(bbox=bbox, limit=limit)
+        except httpx.HTTPError as exc:
+            if depth >= max_depth:
+                logger.error("Skipping bbox {} after fallback attempts: {}", bbox, exc)
+                return []
+            logger.warning("Splitting failing bbox {} at depth {} due to: {}", bbox, depth, exc)
+            child_bboxes = self._split_bbox(bbox)
+            merged: list[dict] = []
+            per_child_limit = max(1, limit // len(child_bboxes))
+            for child_bbox in child_bboxes:
+                merged.extend(
+                    await self._search_bbox_with_fallback(
+                        mapillary=mapillary,
+                        bbox=child_bbox,
+                        limit=per_child_limit,
+                        depth=depth + 1,
+                        max_depth=max_depth,
+                    )
+                )
+            return merged
+
     async def _run_async(self) -> pd.DataFrame:
         sub_boxes = self._subdivide_bbox(self.settings.sweden_bbox)
         logger.info("Running pipeline across {} sub-bounding boxes", len(sub_boxes))
         all_rows: list[dict] = []
+        started = time.perf_counter()
+        total_boxes = len(sub_boxes)
 
         async with MapillaryClient(self.settings) as mapillary:
-            for bbox in sub_boxes:
-                try:
-                    records = await mapillary.search_images(
-                        bbox=bbox,
-                        limit=self.settings.mapillary_query_limit,
-                    )
-                except httpx.HTTPError as exc:
-                    logger.error("Skipping bbox {} due to Mapillary error: {}", bbox, exc)
-                    continue
+            for idx, bbox in enumerate(sub_boxes, start=1):
+                logger.info("Processing bbox {}/{}: {}", idx, len(sub_boxes), bbox)
+                records = await self._search_bbox_with_fallback(
+                    mapillary=mapillary,
+                    bbox=bbox,
+                    limit=self.settings.mapillary_query_limit,
+                )
+                logger.info("bbox {}/{} returned {} records", idx, len(sub_boxes), len(records))
                 all_rows.extend(self._extract_rows(records))
+                logger.info("Cumulative raw rows so far: {}", len(all_rows))
+                elapsed = time.perf_counter() - started
+                rate = idx / elapsed if elapsed > 0 else 0.0
+                remaining = total_boxes - idx
+                eta_seconds = remaining / rate if rate > 0 else 0.0
+                logger.info(
+                    "Pipeline progress {}/{} ({:.1f}%) rate={:.2f} bbox/s eta={:.1f} min",
+                    idx,
+                    total_boxes,
+                    (idx / max(1, total_boxes)) * 100.0,
+                    rate,
+                    eta_seconds / 60.0,
+                )
 
             if not all_rows:
                 logger.warning("No rows fetched from Mapillary.")

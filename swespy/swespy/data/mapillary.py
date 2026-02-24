@@ -4,13 +4,31 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+import time
 from typing import Any
 
 import httpx
 from loguru import logger
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import (
+    RetryCallState,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from swespy.config import Settings
+
+
+def log_before_sleep(retry_state: RetryCallState) -> None:
+    """Log retry attempt details before tenacity sleeps."""
+    exc = retry_state.outcome.exception() if retry_state.outcome else None
+    logger.warning(
+        "Retrying Mapillary request attempt={} next_sleep={:.2f}s error={}",
+        retry_state.attempt_number,
+        retry_state.next_action.sleep if retry_state.next_action else 0.0,
+        exc,
+    )
 
 
 class MapillaryClient:
@@ -32,14 +50,23 @@ class MapillaryClient:
         stop=stop_after_attempt(5),
         wait=wait_exponential(multiplier=1, min=1, max=30),
         retry=retry_if_exception_type((httpx.HTTPError,)),
+        before_sleep=log_before_sleep,
         reraise=True,
     )
     async def _request(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
         """Execute a GET request with retry and return parsed JSON."""
+        logger.debug("Mapillary request path={} params={}", path, params)
         response = await self._client.get(
             f"{self.base_url}{path}",
             params=params,
             headers={"Authorization": f"OAuth {self.settings.mapillary_access_token}"},
+        )
+        logger.debug(
+            "Mapillary response status={} path={} query_limit={} has_after={}",
+            response.status_code,
+            path,
+            params.get("limit"),
+            "after" in params,
         )
         response.raise_for_status()
         return response.json()
@@ -59,8 +86,10 @@ class MapillaryClient:
         results: list[dict] = []
         after: str | None = None
         page_size = min(self.settings.mapillary_page_size, limit)
+        page_index = 0
 
         while len(results) < limit:
+            page_index += 1
             params: dict[str, Any] = {
                 "bbox": ",".join(str(v) for v in bbox),
                 "fields": fields,
@@ -69,6 +98,15 @@ class MapillaryClient:
             if after:
                 params["after"] = after
 
+            logger.info(
+                "Requesting bbox={} page={} page_size={} fetched={} remaining={}",
+                bbox,
+                page_index,
+                params["limit"],
+                len(results),
+                limit - len(results),
+            )
+            started = time.perf_counter()
             try:
                 payload = await self._request("/images", params)
             except httpx.HTTPStatusError as exc:
@@ -85,14 +123,24 @@ class MapillaryClient:
                 raise
 
             page = payload.get("data", [])
+            elapsed_s = time.perf_counter() - started
             if not page:
+                logger.info("No more data for bbox={} page={} duration={:.2f}s", bbox, page_index, elapsed_s)
                 break
 
             results.extend(page)
             paging = payload.get("paging", {})
             cursors = paging.get("cursors", {})
             after = cursors.get("after")
-            logger.info("Fetched {} images so far", len(results))
+            logger.info(
+                "Fetched {} images so far for bbox={} page={} page_items={} duration={:.2f}s next_cursor_present={}",
+                len(results),
+                bbox,
+                page_index,
+                len(page),
+                elapsed_s,
+                bool(after),
+            )
             if not after:
                 break
 
@@ -124,15 +172,61 @@ class MapillaryClient:
     ) -> None:
         """Download image records concurrently with bounded parallelism."""
         semaphore = asyncio.Semaphore(concurrency)
+        total = len(image_records)
+        completed = 0
+        failed = 0
+        lock = asyncio.Lock()
+        log_every = max(1, total // 20)
+        started = time.perf_counter()
 
         async def _worker(record: dict) -> None:
-            thumb_url = record.get("thumb_2048_url")
-            image_id = record.get("id")
+            nonlocal completed, failed
+            thumb_url = record.get("thumb_2048_url") or record.get("thumb_url")
+            image_id = record.get("id") or record.get("image_id")
             if not thumb_url or not image_id:
+                async with lock:
+                    failed += 1
+                    done = completed + failed
+                    if done % log_every == 0 or done == total:
+                        elapsed = time.perf_counter() - started
+                        logger.info(
+                            "Download progress {}/{} ({:.1f}%) failed={} elapsed={:.1f}s",
+                            done,
+                            total,
+                            (done / max(1, total)) * 100.0,
+                            failed,
+                            elapsed,
+                        )
                 return
             async with semaphore:
-                await self.download_image(thumb_url, dest_dir / f"{image_id}.jpg")
+                try:
+                    await self.download_image(thumb_url, dest_dir / f"{image_id}.jpg")
+                    async with lock:
+                        completed += 1
+                except httpx.HTTPError:
+                    async with lock:
+                        failed += 1
+                finally:
+                    async with lock:
+                        done = completed + failed
+                        if done % log_every == 0 or done == total:
+                            elapsed = time.perf_counter() - started
+                            logger.info(
+                                "Download progress {}/{} ({:.1f}%) failed={} elapsed={:.1f}s",
+                                done,
+                                total,
+                                (done / max(1, total)) * 100.0,
+                                failed,
+                                elapsed,
+                            )
 
         logger.info("Starting batch download for {} images", len(image_records))
         await asyncio.gather(*[_worker(record) for record in image_records])
-        logger.info("Finished image download batch")
+        elapsed = time.perf_counter() - started
+        logger.info(
+            "Finished image download batch completed={} failed={} total={} elapsed={:.1f}s",
+            completed,
+            failed,
+            total,
+            elapsed,
+        )
