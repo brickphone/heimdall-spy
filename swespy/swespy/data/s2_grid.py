@@ -3,21 +3,21 @@
 from __future__ import annotations
 
 import pandas as pd
-from s2geometry import pywraps2 as s2
+from s2sphere import CellId, LatLng
 
 
 def lat_lng_to_cell_id(lat: float, lng: float, level: int) -> str:
     """Convert a coordinate to an S2 cell token at a given level."""
-    lat_lng = s2.S2LatLng.FromDegrees(lat, lng)
-    cell_id = s2.S2CellId.FromLatLng(lat_lng).parent(level)
-    return cell_id.ToToken()
+    lat_lng = LatLng.from_degrees(lat, lng)
+    cell_id = CellId.from_lat_lng(lat_lng).parent(level)
+    return cell_id.to_token()
 
 
 def cell_id_to_lat_lng(cell_token: str) -> tuple[float, float]:
     """Return center point (lat, lng) for an S2 cell token."""
-    cell_id = s2.S2CellId.FromToken(cell_token)
-    center = cell_id.ToLatLng()
-    return center.lat().degrees(), center.lng().degrees()
+    cell_id = CellId.from_token(cell_token)
+    center = cell_id.to_lat_lng()
+    return center.lat().degrees, center.lng().degrees
 
 
 def assign_cells_to_dataframe(df: pd.DataFrame, level: int) -> pd.DataFrame:
