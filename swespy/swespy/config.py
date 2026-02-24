@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     top_k_results: int = 5
     embedding_dim: int = 768
     mapillary_query_limit: int = 2000
+    mapillary_page_size: int = 1000
+    mapillary_min_page_size: int = 100
     mapillary_download_concurrency: int = 20
     bbox_grid_lon_divisions: int = 6
     bbox_grid_lat_divisions: int = 6

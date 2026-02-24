@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+import httpx
 import pandas as pd
 from loguru import logger
 
@@ -66,8 +67,19 @@ class DataPipeline:
 
         async with MapillaryClient(self.settings) as mapillary:
             for bbox in sub_boxes:
-                records = await mapillary.search_images(bbox=bbox, limit=self.settings.mapillary_query_limit)
+                try:
+                    records = await mapillary.search_images(
+                        bbox=bbox,
+                        limit=self.settings.mapillary_query_limit,
+                    )
+                except httpx.HTTPError as exc:
+                    logger.error("Skipping bbox {} due to Mapillary error: {}", bbox, exc)
+                    continue
                 all_rows.extend(self._extract_rows(records))
+
+            if not all_rows:
+                logger.warning("No rows fetched from Mapillary.")
+                return pd.DataFrame(columns=["image_id", "lat", "lng", "s2_cell", "local_path"])
 
             df = pd.DataFrame(all_rows).drop_duplicates(subset=["image_id"])
             df = assign_cells_to_dataframe(df, level=self.settings.s2_cell_level)
@@ -82,11 +94,12 @@ class DataPipeline:
                 .reset_index(drop=True)
             )
 
-            await mapillary.batch_download(
-                capped.to_dict("records"),
-                self.raw_dir,
-                concurrency=self.settings.mapillary_download_concurrency,
-            )
+            if not capped.empty:
+                await mapillary.batch_download(
+                    capped.to_dict("records"),
+                    self.raw_dir,
+                    concurrency=self.settings.mapillary_download_concurrency,
+                )
 
         capped["local_path"] = capped["image_id"].apply(lambda image_id: str(self.raw_dir / f"{image_id}.jpg"))
         return capped
@@ -114,6 +127,12 @@ class DataPipeline:
         self.raw_dir.mkdir(parents=True, exist_ok=True)
         self.meta_dir.mkdir(parents=True, exist_ok=True)
         df = asyncio.run(self._run_async())
+        if df.empty:
+            out_path = self.meta_dir / "images.parquet"
+            df.to_parquet(out_path, index=False)
+            logger.warning("Saved empty metadata to {}", out_path)
+            return df
+
         cleaned = self._clean_small_files(df)
         output = cleaned[["image_id", "lat", "lng", "s2_cell", "local_path"]]
         out_path = self.meta_dir / "images.parquet"

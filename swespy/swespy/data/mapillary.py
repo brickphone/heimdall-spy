@@ -58,17 +58,32 @@ class MapillaryClient:
         fields = "id,geometry,captured_at,thumb_2048_url"
         results: list[dict] = []
         after: str | None = None
+        page_size = min(self.settings.mapillary_page_size, limit)
 
         while len(results) < limit:
             params: dict[str, Any] = {
                 "bbox": ",".join(str(v) for v in bbox),
                 "fields": fields,
-                "limit": min(1000, limit - len(results)),
+                "limit": min(page_size, limit - len(results)),
             }
             if after:
                 params["after"] = after
 
-            payload = await self._request("/images", params)
+            try:
+                payload = await self._request("/images", params)
+            except httpx.HTTPStatusError as exc:
+                status_code = exc.response.status_code
+                if status_code in (429, 500, 502, 503, 504) and page_size > self.settings.mapillary_min_page_size:
+                    page_size = max(self.settings.mapillary_min_page_size, page_size // 2)
+                    logger.warning(
+                        "Mapillary {} for bbox {}. Reducing page_size to {} and retrying.",
+                        status_code,
+                        bbox,
+                        page_size,
+                    )
+                    continue
+                raise
+
             page = payload.get("data", [])
             if not page:
                 break
