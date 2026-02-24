@@ -78,6 +78,12 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="SweSpy API", version="0.1.0", lifespan=lifespan)
     app.state.limiter = limiter
+    app.state.top_k_results = settings.top_k_results
+    app.state.allowed_image_types = set(settings.allowed_image_types)
+    app.state.max_upload_size_mb = settings.max_upload_size_mb
+    if settings.testing:
+        app.state.embedder = DummyEmbedder()
+        app.state.vector_store = DummyVectorStore()
 
     app.add_middleware(SlowAPIMiddleware)
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
