@@ -30,8 +30,9 @@ and Qdrant schema remain unchanged from the audited revision.
 
 ## Verified locally
 
-Windows, bundled Python 3.12.14, locked project dependencies installed in `.venv`.
-No model weights, reference datasets or evaluation photographs downloaded;
+Initial validation: Windows, bundled Python 3.12.14, locked project dependencies
+installed in `.venv`. At that stage no model weights, reference datasets or
+evaluation photographs were downloaded;
 no training or indexing performed; no external image inference APIs called.
 
 - Full pytest: **25 passed, 1 skipped**. Four pre-existing tests passed.
@@ -46,10 +47,45 @@ no training or indexing performed; no external image inference APIs called.
 - Missing-label validation reports an actionable error without importing/loading
   CLIP or writing results. Private image/label/snapshot/results paths are ignored.
 - Compose YAML parses and its Qdrant version/hostname settings were checked.
-  **Docker is unavailable here: container build and startup are unverified.**
-  Docker Python is pinned to 3.12.8; local verification used 3.12.14. Runtime
+  Docker was unavailable at the initial check; see the follow-up below for the
+  completed container verification. Docker Python is pinned to 3.12.8; local
+  verification used 3.12.14. Runtime
   provenance records the actual interpreter; cross-platform snapshot parity is
   not claimed.
+
+## Docker follow-up verification, 2026-10-16
+
+After the user installed Docker Desktop and requested a runtime check:
+
+- Started Docker Desktop successfully; engine 29.8.2 and Compose v5.6.0.
+- Actual `docker compose config --quiet` passed; `docker compose up --build -d`
+  completed successfully, including locked dependency installation on Linux.
+- Both `swespy-api-1` and `swespy-qdrant-1` are running with localhost-only ports.
+  The real CLIP model loaded and its pretrained weights/cache became available;
+  application startup completed without inference-source changes.
+- API `/health` and `/docs`: HTTP 200. Qdrant `/readyz`: HTTP 200.
+- Collection `swespy_embeddings`: **0 reference points**, cosine vectors of size
+  768. No existing Docker containers or named volumes were found before startup.
+  This does not establish whether old reference data exists elsewhere on disk.
+- An in-memory synthetic 64x64 PNG passed through real `/predict`: HTTP 200,
+  approximately 2.59s inference processing time, pin `(0,0)`, confidence 0 and
+  empty matches. This verifies runtime execution and the audited empty-index
+  behavior, not geolocation accuracy. Non-image MIME input returned HTTP 400.
+- No reference imagery, evaluation photos or training data was downloaded;
+  no training or indexing was performed. The services were left running.
+- Disk usage is material: active images total approximately 9.47 GB. Cleared
+  all 12 disposable build-cache records from this first build (reported 9.20 GB),
+  then verified both services remained running and build cache was zero.
+  Windows C: still reported only approximately 1.7 GB free afterward. No images,
+  containers, model cache or reference data were deleted; Windows disk-space
+  recovery/VM compaction was not performed.
+
+Docker is installed under
+`C:\Users\matti\AppData\Local\Programs\DockerDesktop\resources\bin`.
+The existing terminal did not inherit the new PATH entry, including the Docker
+credential helper; a process-local PATH addition allowed the build. Restart
+VS Code to pick up the installation's PATH update. No permanent PATH changes
+were made by this check.
 
 ## Missing prerequisites
 
