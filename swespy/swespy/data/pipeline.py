@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
+import math
 import time
+import uuid
+from pathlib import Path
 
 import httpx
 import pandas as pd
 from loguru import logger
 
 from swespy.config import Settings
-from swespy.data.mapillary import MapillaryClient
+from swespy.data.mapillary import MapillaryClient, is_retryable, valid_image
 from swespy.data.s2_grid import assign_cells_to_dataframe
 
 
@@ -24,7 +26,9 @@ class DataPipeline:
         self.raw_dir = self.project_root / "data" / "raw"
         self.meta_dir = self.project_root / "data" / "metadata"
 
-    def _subdivide_bbox(self, bbox: tuple[float, float, float, float]) -> list[tuple[float, float, float, float]]:
+    def _subdivide_bbox(
+        self, bbox: tuple[float, float, float, float]
+    ) -> list[tuple[float, float, float, float]]:
         min_lon, min_lat, max_lon, max_lat = bbox
         divisions_lon = self.settings.bbox_grid_lon_divisions
         divisions_lat = self.settings.bbox_grid_lat_divisions
@@ -70,11 +74,26 @@ class DataPipeline:
     def _extract_rows(records: list[dict]) -> list[dict]:
         rows: list[dict] = []
         for record in records:
-            geometry = record.get("geometry", {})
-            coords = geometry.get("coordinates", [None, None])
+            geometry = record.get("geometry")
+            if not isinstance(geometry, dict):
+                continue
+            coords = geometry.get("coordinates")
+            if not isinstance(coords, list | tuple) or len(coords) < 2:
+                continue
             lng, lat = coords[0], coords[1]
             image_id = record.get("id")
             if lat is None or lng is None or image_id is None:
+                continue
+            try:
+                lat, lng = float(lat), float(lng)
+            except (ValueError, TypeError):
+                continue
+            if not (
+                math.isfinite(lat)
+                and math.isfinite(lng)
+                and -90 <= lat <= 90
+                and -180 <= lng <= 180
+            ):
                 continue
             rows.append(
                 {
@@ -87,7 +106,9 @@ class DataPipeline:
         return rows
 
     @staticmethod
-    def _split_bbox(bbox: tuple[float, float, float, float]) -> list[tuple[float, float, float, float]]:
+    def _split_bbox(
+        bbox: tuple[float, float, float, float],
+    ) -> list[tuple[float, float, float, float]]:
         """Split one bbox into 4 smaller quadrants."""
         min_lon, min_lat, max_lon, max_lat = bbox
         mid_lon = (min_lon + max_lon) / 2.0
@@ -111,9 +132,12 @@ class DataPipeline:
         try:
             return await mapillary.search_images(bbox=bbox, limit=limit)
         except httpx.HTTPError as exc:
+            if not is_retryable(exc):
+                raise
             if depth >= max_depth:
-                logger.error("Skipping bbox {} after fallback attempts: {}", bbox, exc)
-                return []
+                raise RuntimeError(
+                    "Mapillary metadata search failed after fallback; existing metadata preserved."
+                ) from exc
             logger.warning("Splitting failing bbox {} at depth {} due to: {}", bbox, depth, exc)
             child_bboxes = self._split_bbox(bbox)
             merged: list[dict] = []
@@ -136,17 +160,32 @@ class DataPipeline:
         all_rows: list[dict] = []
         started = time.perf_counter()
         total_boxes = len(sub_boxes)
+        per_box_limit = min(
+            self.settings.mapillary_query_limit,
+            math.ceil(self.settings.reference_image_limit / total_boxes),
+        )
 
         async with MapillaryClient(self.settings) as mapillary:
             for idx, bbox in enumerate(sub_boxes, start=1):
+                remaining_budget = self.settings.reference_image_limit - len(all_rows)
+                if remaining_budget <= 0:
+                    break
                 logger.info("Processing bbox {}/{}: {}", idx, len(sub_boxes), bbox)
                 records = await self._search_bbox_with_fallback(
                     mapillary=mapillary,
                     bbox=bbox,
-                    limit=self.settings.mapillary_query_limit,
+                    limit=min(per_box_limit, remaining_budget),
                 )
                 logger.info("bbox {}/{} returned {} records", idx, len(sub_boxes), len(records))
-                all_rows.extend(self._extract_rows(records))
+                rows = self._extract_rows(records)
+                west, south, east, north = self.settings.sweden_bbox
+                all_rows.extend(
+                    [
+                        row
+                        for row in rows
+                        if west <= row["lng"] <= east and south <= row["lat"] <= north
+                    ][:remaining_budget]
+                )
                 logger.info("Cumulative raw rows so far: {}", len(all_rows))
                 elapsed = time.perf_counter() - started
                 rate = idx / elapsed if elapsed > 0 else 0.0
@@ -185,11 +224,13 @@ class DataPipeline:
                     concurrency=self.settings.mapillary_download_concurrency,
                 )
 
-        capped["local_path"] = capped["image_id"].apply(lambda image_id: str(self.raw_dir / f"{image_id}.jpg"))
+        capped["local_path"] = capped["image_id"].apply(
+            lambda image_id: str(self.raw_dir / f"{image_id}.jpg")
+        )
         return capped
 
     def _clean_small_files(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Remove rows where file size is below 100KB and delete those files."""
+        """Exclude missing, small or corrupt files without deleting cached references."""
         min_size_bytes = self.settings.min_clean_file_size_kb * 1024
 
         def keep_row(path_str: str) -> bool:
@@ -198,9 +239,8 @@ class DataPipeline:
                 return False
             size = path.stat().st_size
             if size < min_size_bytes:
-                path.unlink(missing_ok=True)
                 return False
-            return True
+            return valid_image(path)
 
         cleaned = df[df["local_path"].apply(keep_row)].copy()
         if "s2_cell" not in cleaned.columns and {"lat", "lng"}.issubset(cleaned.columns):
@@ -211,21 +251,46 @@ class DataPipeline:
 
     def run(self) -> pd.DataFrame:
         """Execute full pipeline and persist metadata parquet."""
+        if not self.settings.mapillary_access_token.strip():
+            raise ValueError(
+                "Configure MAPILLARY_ACCESS_TOKEN in the private .env before ingestion"
+            )
+        west, south, east, north = self.settings.sweden_bbox
+        # Prevent legacy Sweden-wide .env values from triggering national acquisition.
+        if not (15.50 <= west < east <= 15.75 and 58.30 <= south < north <= 58.50):
+            raise ValueError("Reference bbox must stay within the Linkoping pilot area")
+        if not 1 <= self.settings.reference_image_limit <= 5000:
+            raise ValueError("REFERENCE_IMAGE_LIMIT must be between 1 and 5000")
+        if (
+            min(
+                self.settings.bbox_grid_lon_divisions,
+                self.settings.bbox_grid_lat_divisions,
+                self.settings.mapillary_query_limit,
+                self.settings.mapillary_download_concurrency,
+                self.settings.max_images_per_cell,
+            )
+            <= 0
+        ):
+            raise ValueError("Ingestion grid, query, concurrency and cell limits must be positive")
         self.raw_dir.mkdir(parents=True, exist_ok=True)
         self.meta_dir.mkdir(parents=True, exist_ok=True)
         df = asyncio.run(self._run_async())
         if df.empty:
-            out_path = self.meta_dir / "images.parquet"
-            df.to_parquet(out_path, index=False)
-            logger.warning("Saved empty metadata to {}", out_path)
-            return df
+            raise RuntimeError("No reference records found; existing metadata preserved")
 
         cleaned = self._clean_small_files(df)
         if "s2_cell" not in cleaned.columns and {"lat", "lng"}.issubset(cleaned.columns):
             logger.warning("s2_cell missing before save; reassigning from lat/lng")
             cleaned = assign_cells_to_dataframe(cleaned, level=self.settings.s2_cell_level)
         output = cleaned[["image_id", "lat", "lng", "s2_cell", "local_path"]]
+        if output.empty:
+            raise RuntimeError("No valid reference images remain; existing metadata preserved")
         out_path = self.meta_dir / "images.parquet"
-        output.to_parquet(out_path, index=False)
+        temporary = self.meta_dir / f".images.{uuid.uuid4().hex}.parquet"
+        try:
+            output.to_parquet(temporary, index=False)
+            temporary.replace(out_path)
+        finally:
+            temporary.unlink(missing_ok=True)
         logger.info("Saved metadata to {}", out_path)
         return output

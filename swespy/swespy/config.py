@@ -15,7 +15,9 @@ class Settings(BaseSettings):
     qdrant_collection_name: str = "swespy_embeddings"
     clip_model_name: str = "openai/clip-vit-large-patch14"
     s2_cell_level: int = 14
-    sweden_bbox: tuple[float, float, float, float] = (10.5, 55.0, 24.2, 69.1)
+    # Central Linkoping pilot, not the full city or municipal boundary.
+    sweden_bbox: tuple[float, float, float, float] = (15.58, 58.39, 15.66, 58.43)
+    reference_image_limit: int = 500
     image_size: int = 224
     batch_size: int = 64
     max_images_per_cell: int = 50
