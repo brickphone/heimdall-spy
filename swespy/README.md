@@ -41,9 +41,12 @@ uv run --frozen uvicorn swespy.api.main:app --reload
 
 ## Scripts
 
-These existing scripts require reference data or external credentials. Ingestion
-defaults still cover Sweden and have known faults; do not run ingestion for this
-Linköping-only baseline. Model, S2 level and Qdrant schema are unchanged.
+These scripts require reference data or external credentials. After the historical
+Mac dataset was lost, ingestion prerequisites were repaired for a capped
+central-Linköping rebuild; see [the rebuild record](../docs/REBUILD.md). Configure
+the Mapillary token privately in `.env`. Ingestion is separate from startup and
+never supplies evaluation photos. Model, S2 level and Qdrant schema are unchanged.
+Indexing refuses to overwrite a populated collection. Training remains deferred.
 
 - `python scripts/download_data.py`
 - `python scripts/train.py`

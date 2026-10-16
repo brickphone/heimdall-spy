@@ -89,21 +89,24 @@ were made by this check.
 
 ## Missing prerequisites
 
-The user does not know the locations of the evaluation photos/labels or the
-existing reference collection. None are present in this checkout. There is no
+The historical Mac reference collection was reported lost. A subsequent authorized
+rebuild populated a new 189-image central-Linköping pilot collection; see
+[REBUILD.md](REBUILD.md) for prerequisite changes, scope and live checks.
+Independent user-owned evaluation photos/labels are still absent. There is no
 measured `eval/results/baseline.json` or captured private snapshot. Creating
 placeholder results would violate the task, so neither has been fabricated.
 
 To complete Part 2, supply user-owned queries labelled with camera positions and
-the existing populated Linköping reference collection (or a private backup), plus
-the existing model/cache revision if available. Use `swespy/eval/README.md` to
+freeze the rebuilt reference collection and current model/cache revision.
+Use `swespy/eval/README.md` to
 validate and capture once. Actual model loading follows the unmodified source;
 recorded model and processor identities must be frozen for subsequent comparisons.
 Before committing a measured aggregate baseline, review provenance for sensitive
 collection identifiers. Photos, labels and prediction snapshots stay private.
 
-If the historical reference index cannot be recovered, creating one is a
-separate data decision: it cannot be called a reproduction of historical results.
+The rebuilt reference index is a new data decision and cannot be called a
+reproduction of historical results. Ingestion prerequisites were repaired first
+under the user's rebuild authorization; the broader inference refactor is still gated.
 Do not begin behavior-changing refactoring, confidence calibration or model
 experiments until a genuine baseline and snapshot are available and this Part 2
 output is complete and committed.

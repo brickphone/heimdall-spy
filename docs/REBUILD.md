@@ -43,3 +43,28 @@ The new real-photo baseline remains pending independent user-owned photos and
 camera-location labels, including all four viewpoint types. Mapillary reference
 images must never be used as that evaluation set. Do not present a rebuilt
 retrieval index or a synthetic request as measured geolocation accuracy.
+
+## First pilot result, 2026-10-16
+
+- Mapillary authentication succeeded. 231 reference photos downloaded without
+  download failures; 189 passed the unchanged 100 KiB threshold and decode checks.
+  Smaller originals remain in raw storage. Total raw data size: 47.13 MiB.
+- Accepted references span 34 S2 cells, latitude 58.391011–58.426994 and longitude
+  15.580333–15.654169. This is sparse pilot coverage, not dense city coverage.
+- Embedded the 189 references inside the running Linux container using the
+  already-cached `openai/clip-vit-large-patch14`, offline model loading and batch
+  size 8. Vector shape/finiteness/norm checks passed before upsert. The updated
+  indexing script was streamed into the existing container; its original image
+  has not been rebuilt with these source changes yet.
+- Qdrant confirmed 189 points in `swespy_embeddings`; schema remains 768-d cosine.
+- One reference replay through the actual API returned HTTP 200, five candidates,
+  top similarity 0.9999999, and a candidate at the known reference coordinates.
+  Processing time was approximately 473 ms. This is a wiring/same-image retrieval
+  smoke test, not a viewpoint benchmark or proof of accuracy on unseen images.
+- Final regression suite: **34 passed, 1 live snapshot skipped**. Changed
+  ingestion/index code and tests pass Ruff; the three ingestion/index source
+  files pass mypy with third-party stubs/imported legacy modules excluded.
+- Token, raw photos and metadata are ignored by Git. No training, new model,
+  confidence calibration or independent eval baseline was produced. Both services
+  remain running with the new collection accessible immediately, without restarting
+  the API.

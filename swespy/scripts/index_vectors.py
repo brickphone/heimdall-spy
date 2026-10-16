@@ -2,7 +2,9 @@
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+from loguru import logger
 
 from swespy.config import get_settings
 from swespy.model.embedder import CLIPEmbedder
@@ -28,6 +30,17 @@ if __name__ == "__main__":
     if any(not path.is_file() for path in image_paths):
         raise RuntimeError("Reference images are missing from data/raw; indexing was not started")
     embedder = CLIPEmbedder(settings)
-    embeddings = embedder.embed_batch(image_paths)
+    batches = []
+    for start in range(0, len(image_paths), settings.batch_size):
+        current = image_paths[start : start + settings.batch_size]
+        batches.append(embedder.embed_batch(current))
+        logger.info("Embedded {}/{} reference images", start + len(current), len(image_paths))
+    embeddings = np.vstack(batches)
+    if (
+        embeddings.shape != (len(image_paths), settings.embedding_dim)
+        or not np.isfinite(embeddings).all()
+        or not np.allclose(np.linalg.norm(embeddings, axis=1), 1.0, atol=1e-5)
+    ):
+        raise RuntimeError("Invalid reference embeddings; nothing was upserted")
     payloads = metadata[["image_id", "lat", "lng", "s2_cell"]].to_dict("records")
     store.upsert_embeddings(embeddings, payloads)
