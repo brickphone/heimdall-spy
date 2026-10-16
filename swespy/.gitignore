@@ -8,3 +8,13 @@ data/raw/
 data/processed/
 data/metadata/*.parquet
 qdrant_storage/
+eval/photos/*
+!eval/photos/.gitkeep
+eval/labels.csv
+eval/results/*.json
+!eval/results/baseline.json
+eval/snapshots/*.json
+.mypy_cache/
+.uv-cache/
+data/checkpoints/
+data/huggingface/
