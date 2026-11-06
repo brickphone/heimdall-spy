@@ -1,8 +1,10 @@
 # SweSpy
 
 SweSpy is an experimental image-geolocation API. Its current pretrained CLIP
-retrieval pipeline is being audited and measured for Linköping. It does not yet
-have a measured accuracy baseline or calibrated confidence.
+retrieval pipeline is being audited and measured for Linköping. Separate CLIP and
+MegaLoc retrieval experiments have measured results; accuracy on independent
+ordinary user photos and calibrated confidence remain unestablished. See the
+[repository overview](../README.md) for architecture, technologies and current status.
 
 ## Quickstart
 

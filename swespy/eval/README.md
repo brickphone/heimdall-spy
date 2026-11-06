@@ -276,3 +276,35 @@ Mac virtual environments or `.env` credentials into a public artifact. The drive
 also accepts `--device cuda`; descriptor cache identity records the device/software,
 so a device change may require re-encoding. Completed descriptor arrays and source
 datasets remain portable. No cloud resources or paid compute are provisioned here.
+
+## City-wide Linkoping reference acquisition
+
+From `swespy/`, with the private Mapillary token in `.env`:
+
+```bash
+.venv-benchmark/bin/python -u -m eval.expand_linkoping
+```
+
+This creates a separate frozen gallery at `data/linkoping_dense/city_v1/` within
+`(15.50, 58.34, 15.75, 58.48)`. Eighty metadata tiles are checkpointed independently;
+four metadata requests and six photo downloads can run concurrently. A first-pass
+budget of 600 metadata records per tile and a total cap of 10,000 reference photos
+bound acquisition. The provider may return fewer records without a pagination
+cursor; neither the budget nor the cap implies exhaustive coverage.
+
+All 369 central references are retained byte-for-byte using hard links. Additional
+references use the newest photo per 20m position / 45-degree heading bin, balanced
+round-robin across 1km cells. The old and central test capture sequences, including
+all central reserved sequences, are excluded. Additional images matching protected
+test hashes or conservative perceptual-hash thresholds are rejected, as are exact
+duplicates within the gallery. This screening does not prove independence.
+
+Downloads are validated and resumable. Transient failures prevent publishing a
+final manifest until a successful rerun; a 4 GiB free-disk guard stops acquisition.
+The manifest retains GPS, heading, capture time, creator, license, source link and
+image hash. `coverage.html` displays actual downloaded camera positions with photo
+previews; `coverage.geojson` is available for GIS inspection. The HTML map uses
+external Leaflet/OpenStreetMap resources and needs an internet connection.
+
+This command acquires reference images only. It does not encode them, train a model,
+modify Qdrant, change the application model, or change frozen evaluation datasets.

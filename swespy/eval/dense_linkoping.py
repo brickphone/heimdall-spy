@@ -35,7 +35,9 @@ FIELDS = "id,sequence,captured_at,geometry,creator,compass_angle,is_pano,thumb_1
 OLD_MANIFEST = Path("data/mapillary_eval/20261106T095121.923253Z/manifest.json")
 
 
-def normalized(raw: dict[str, Any]) -> dict[str, Any] | None:
+def normalized(
+    raw: dict[str, Any], bbox: tuple[float, float, float, float] = BBOX,
+) -> dict[str, Any] | None:
     """Require nonpanoramic imagery and attribution; retain camera heading when available."""
     import utm
 
@@ -44,7 +46,7 @@ def normalized(raw: dict[str, Any]) -> dict[str, Any] | None:
     item = record({**raw, "thumb_2048_url": raw.get("thumb_1024_url")})
     if item is None or not item["thumb_url"]:
         return None
-    west, south, east, north = BBOX
+    west, south, east, north = bbox
     if not west <= item["lng"] <= east or not south <= item["lat"] <= north:
         return None
     angle = raw.get("compass_angle")
