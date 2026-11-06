@@ -19,3 +19,8 @@ eval/snapshots/*.json
 data/checkpoints/
 data/huggingface/
 data/mapillary_eval/
+data/megaloc/
+.uv-python/
+data/benchmarks/
+data/linkoping_dense/
+.venv-benchmark/

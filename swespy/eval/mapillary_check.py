@@ -341,10 +341,11 @@ h1{font-size:25px}#map{height:510px;border-radius:12px;margin:20px 0}
 article{background:white;padding:16px;border:1px solid #ddd;border-radius:12px}
 img{width:100%;height:180px;object-fit:contain;background:#eef}button{padding:8px;cursor:pointer}
 .muted{color:#526174}a{color:#165ca3}.badge{font-weight:600}.legend{margin:12px 0}
-</style><h1>Linköping street retrieval check</h1><p id="summary"></p>
+</style><h1 id="title">Linköping street retrieval check</h1><p id="summary"></p>
 <p class="muted">Mapillary sequence holdout · street-level only · similarity is uncalibrated.
 Same-provider results may be optimistic. Hash screening cannot prove independence.</p>
-<div class="legend">🟢 Camera label &nbsp; 🔴 Averaged prediction &nbsp; 🔵 Ranked candidates</div>
+<div class="legend">🟢 Camera label &nbsp; 🔴 <span id="prediction-label">Averaged prediction</span>
+&nbsp; 🔵 Ranked candidates</div>
 <div id="map"></div><div class="grid" id="cards"></div>
 <p class="muted">Previews are resized Mapillary images, attributed individually under CC BY-SA 4.0.
 The map needs internet for Leaflet and OpenStreetMap tiles; photo cards remain self-contained.</p>
@@ -352,11 +353,14 @@ The map needs internet for Leaflet and OpenStreetMap tiles; photo cards remain s
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 const r=JSON.parse(document.getElementById('report').textContent),m=r.metrics.overall;
+if(r.model_label){document.getElementById('title').textContent=r.model_label;
+ document.title=r.model_label;}
+if(r.prediction_label)document.getElementById('prediction-label').textContent=r.prediction_label;
 document.getElementById('summary').textContent=`${m.count} queries from
 ${r.query_sequence_count} sequences.
 Median pin error: ${m.median_error_m.toFixed(0)} m. Within 100 m: ${m.pct_within_100m.toFixed(1)}%.
 Within 500 m: ${m.pct_within_500m.toFixed(1)}%.
-Top-five within 100 m: ${m.top_k_hit_pct.toFixed(1)}%.`;
+Top-${r.top_k ?? 5} within ${r.hit_radius_m ?? 100} m: ${m.top_k_hit_pct.toFixed(1)}%.`;
 const map=typeof L!=='undefined'?L.map('map'):null, bounds=[];
 if(map)L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
 attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(map);
@@ -381,7 +385,7 @@ r.queries.forEach((q,i)=>{const p=q.prediction,actual=[q.lat,q.lng];
  h.textContent=`Query ${i+1} · ${q.error_m.toFixed(0)} m pin error`;
  card.append(h);const text=document.createElement('p');
  text.textContent=`Nearest reference: ${q.nearest_reference_m.toFixed(0)} m.
- Best of five: ${q.best_candidate_error_m?.toFixed(0) ?? 'n/a'} m.
+ Best of ${r.top_k ?? 5}: ${q.best_candidate_error_m?.toFixed(0) ?? 'n/a'} m.
  Top-ranked: ${q.top_1_error_m?.toFixed(0) ?? 'n/a'} m.
  Camera: ${q.lat.toFixed(6)}, ${q.lng.toFixed(6)}.
  Captured ${new Date(q.captured_at).toISOString().slice(0,10)}.`;

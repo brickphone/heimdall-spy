@@ -115,3 +115,164 @@ be presented as general photo-geolocation accuracy or replace user-owned photos.
 
 Source attribution and capture details are retained for each query and indexed
 reference. See Mapillary's [imagery license guidance](https://help.mapillary.com/hc/en-us/articles/115001770409-CC-BY-SA-license-for-open-data).
+
+## Pretrained MegaLoc comparison
+
+`megaloc_compare.py` compares the fixed street queries against the original CLIP
+report using the same reference image IDs, GPS payloads, cosine retrieval, top five,
+100m hit radius and similarity-weighted coordinate aggregation. It creates a new
+timestamped Qdrant collection with 8,448-dimensional vectors. The API continues to
+use its original CLIP collection. No reference/query acquisition or training occurs.
+
+The default manifest/report arguments select the 2026-11-06 street check. Both
+must already exist locally. The tool rejects changes to the original reference
+index, query bytes/labels/order, production inference source and CLIP protocol.
+Source, pretrained weights and their licenses are pinned to immutable upstream
+revisions. The reviewed source checksum is checked before executing the downloaded
+module; safetensors are loaded strictly against its architecture.
+
+For native Apple GPU execution, use the project's locked Python 3.12 environment
+outside Docker, with Qdrant running and `.env` pointing to `localhost`:
+
+```bash
+# Requires uv 0.9.5; this environment is already prepared on the development Mac.
+UV_PYTHON_INSTALL_DIR="$PWD/.uv-python" uv sync --frozen --python 3.12.8 --extra dev
+PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python -u -m eval.megaloc_compare \
+  --device mps --batch-size 4
+```
+
+The pinned torch 2.5.1 needs CPU fallback for bicubic positional interpolation
+and contiguous Conv2d inputs on MPS. The experiment adapter preserves input values
+and leaves upstream source/weights unchanged. Each run first checks CPU/device
+descriptor agreement on two images (minimum cosine 0.999, maximum absolute
+difference 0.001), then embeds the fixed images. `--probe-only` stops after that
+check without creating a collection. `--device cpu` and `--device cuda` are also
+supported; only MPS was used for the complete measured experiment.
+
+Descriptors are cached per image SHA256, model/source identity, preprocessing,
+device, software versions and adapter settings. Interrupted embedding resumes
+without re-encoding verified cached images. Invalid descriptors and changed
+input bytes fail before indexing. Collections are never overwritten. The newly
+created index must pass a reference replay before query metrics are reported,
+and both collections are fingerprinted to detect changes during evaluation.
+
+Ignored `data/megaloc/experiments/<run>/` contains reference-byte provenance,
+model identity, query predictions, `results.json`, an interactive `map.html` and
+an offline-readable `comparison.html` linking both models' maps. Raw query/reference
+photos and the original CLIP artifacts are preserved. Adding `HF_HUB_OFFLINE=1`
+requires the already cached pinned assets. The measured results and limitations
+are in [`docs/MEGALOC_COMPARISON.md`](../../docs/MEGALOC_COMPARISON.md).
+
+## Published benchmark reproduction and dense Linkoping test
+
+These are pretrained retrieval evaluations. They use the authors' coordinate
+labels, exact FAISS search and Recall@1/5/10/20 with a 25m XY positive radius;
+there is no averaged-coordinate prediction in the primary metric.
+
+The prepared development Mac has a separate `.venv-benchmark/` environment that
+reads the locked `.venv/` packages and adds the exact optional packages listed in
+`requirements-benchmark.txt`. The application lock and runtime are unchanged.
+Create the optional environment on a fresh Mac/Linux machine with uv 0.9.5:
+
+```bash
+UV_CACHE_DIR="$PWD/.uv-cache" uv venv --python .venv/bin/python .venv-benchmark
+.venv/bin/python - <<'PY'
+from pathlib import Path
+site = Path('.venv-benchmark/lib/python3.12/site-packages')
+(site / 'locked-project.pth').write_text(
+    str(Path('.venv/lib/python3.12/site-packages').resolve()) + '\n'
+)
+PY
+UV_CACHE_DIR="$PWD/.uv-cache" uv pip install --python .venv-benchmark/bin/python \
+  -r eval/requirements-benchmark.txt
+```
+
+The complete Baidu split is the author-provided version documented in
+[MegaLoc issue 13](https://github.com/gmberton/MegaLoc/issues/13): 5,207 database
+images and 3,208 queries. Other Baidu versions use different splits/labels and
+cannot reproduce the same reported numbers. Download this exact version with:
+
+```bash
+mkdir -p data/benchmarks/baidu
+rsync -r --partial \
+  rsync://vandaldata.polito.it/sf_xl/VPR-datasets-downloader/baidu/ \
+  data/benchmarks/baidu/
+```
+
+The official evaluator source is cached under
+`data/benchmarks/upstream/9c8dfd496b49a49549323b94a6af204cbee91604/`.
+Retrieve `main.py`, `parser.py`, `test_dataset.py`, `visualizations.py`, `LICENSE`,
+`README.md` and `requirements.txt` from that immutable revision of
+`gmberton/VPR-methods-evaluation` when preparing a fresh machine. Upstream originals
+are retained unchanged. Each run saves a separate execution copy with only the
+query batch size adapted. A model factory supplies the pinned MegaLoc model/MPS
+compatibility adapter and resumable descriptor cache, avoiding unrelated model
+submodules. Batch-size invariance and CPU/device parity are checked before running.
+
+```bash
+PYTORCH_ENABLE_MPS_FALLBACK=1 HF_HUB_OFFLINE=1 OMP_NUM_THREADS=1 \
+  .venv-benchmark/bin/python -u -m eval.paper_benchmark --batch-size 32
+```
+
+The model assets must already be cached when using `HF_HUB_OFFLINE=1`.
+The published targets are R@1 87.7% and R@10 98.0%; the protocol declares a
+0.15 percentage-point reproduction tolerance before evaluation. Independent
+recall recomputation must agree with the official displayed output. This is a
+reproduction of released pretrained inference, not the unreleased training run.
+
+All descriptors are cached per model/software/adapter identity and normalized
+input tensor bytes. Interrupting the job preserves completed descriptors; rerunning
+resumes them and creates a new timestamped result folder. Downloaded imagery,
+optional environment and benchmark outputs are ignored by Git. Original CLIP and
+MegaLoc collections/reports remain unchanged.
+
+If encoding completed but the process stalled in the Mac OpenMP/FAISS search,
+score its saved arrays without re-encoding:
+
+```bash
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 .venv-benchmark/bin/python -m eval.score_saved_benchmark \
+  --run data/benchmarks/runs/<run> --dataset data/benchmarks/baidu
+```
+
+The normal driver also limits FAISS to one thread. Completed results and artifact
+links are recorded in [the reproduction report](../../docs/PAPER_REPRODUCTION.md).
+
+The dense central-Linkoping acquisition is a distinct development experiment:
+
+```bash
+.venv-benchmark/bin/python -u -m eval.dense_linkoping
+PYTORCH_ENABLE_MPS_FALLBACK=1 HF_HUB_OFFLINE=1 OMP_NUM_THREADS=1 \
+  .venv-benchmark/bin/python -u -m eval.paper_benchmark \
+  --dataset data/linkoping_dense/central_v1 --name linkoping_dense --batch-size 32
+```
+
+It examines at most 6,000 metadata records within approximately 0.6 km², excludes
+panoramas and protected old query sequences, balances references across 10m position
+and 45° heading bins, and reserves new capture sequences for queries. It downloads
+at most 1,200 selected references and up to 90 query candidates for a target of 30,
+using decode checks without the historical 100 KiB reference-size filter. Fewer
+eligible images/queries are reported without relaxing sequence, duplicate or spacing
+rules. Coordinate-bearing hard links format the photos for the official evaluator.
+
+Coverage is always reported separately: uncovered queries count as misses in the
+all-query metric; conditional recall uses only queries with a positive at 25m.
+Fixed random reference subsets isolate density effects using the same descriptors
+and queries. This same-provider experiment has a small sample and unverified GPS/
+headings; it does not replace independent user-owned evaluation photos.
+
+After a completed run, render its report with:
+
+```bash
+.venv-benchmark/bin/python -m eval.benchmark_report --run data/benchmarks/runs/<run>
+# For dense Linkoping, also provide its fixed dataset and attribution manifest:
+.venv-benchmark/bin/python -m eval.benchmark_report --run data/benchmarks/runs/<dense-run> \
+  --dataset data/linkoping_dense/central_v1 \
+  --manifest data/linkoping_dense/central_v1/manifest.json
+```
+
+For a later cloud run, transfer the repository and required ignored datasets/model
+assets/provenance, then recreate Python environments for the cloud OS. Do not copy
+Mac virtual environments or `.env` credentials into a public artifact. The driver
+also accepts `--device cuda`; descriptor cache identity records the device/software,
+so a device change may require re-encoding. Completed descriptor arrays and source
+datasets remain portable. No cloud resources or paid compute are provisioned here.

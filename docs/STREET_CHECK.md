@@ -1,8 +1,14 @@
 # Automated Linkoping street sanity check
 
+Completed follow-up: [paper reproduction and dense Linkoping results](PAPER_REPRODUCTION.md). The measurements below retain their original experiment context.
+
 Measured 2026-11-06 against the rebuilt 317-reference collection and the existing
 pretrained CLIP retrieval API, including the cosine-roundoff response correction.
 This is a separate Mapillary street test, not the independent user-photo baseline.
+
+A subsequent [MegaLoc comparison](MEGALOC_COMPARISON.md) uses these exact queries
+and references. Candidate retrieval improved, while precise averaged-pin results
+were mixed. The CLIP artifacts and original index were preserved.
 
 ## Fixed selection and leakage safeguards
 
