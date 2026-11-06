@@ -1,5 +1,11 @@
 # Deferred work and design gaps
 
+2026-11-06 update: [STREET_CHECK.md](STREET_CHECK.md) records the first automated
+same-provider street sanity check. Median pin error is 1.90km on 30 queries;
+coverage and retrieval both need improvement. Independent multi-viewpoint
+evaluation and calibrated confidence remain pending. The notes below are the
+historical preliminary plan.
+
 2026-10-16: preliminary notes from Part 1, not the completed Part 5 proposal.
 See [AUDIT.md](AUDIT.md). No baseline photos/labels, deployed index or evaluation
 numbers are available. No model choice can yet be justified by measured accuracy.

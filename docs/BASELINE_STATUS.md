@@ -92,9 +92,19 @@ were made by this check.
 The historical Mac reference collection was reported lost. A subsequent authorized
 rebuild populated a new 189-image central-Linköping pilot collection; see
 [REBUILD.md](REBUILD.md) for prerequisite changes, scope and live checks.
+On 2026-11-06 a fresh M1 Mac rebuild acquired 399 photos and indexed 317 accepted
+references across 42 cells. This is a new collection, not restoration of the
+189-reference index. The rebuild also required a narrow API correction for
+floating-point cosine overshoot; see the Mac rebuild record for validation.
 Independent user-owned evaluation photos/labels are still absent. There is no
 measured `eval/results/baseline.json` or captured private snapshot. Creating
 placeholder results would violate the task, so neither has been fabricated.
+
+A separate automated Mapillary street sanity check was completed on 2026-11-06:
+30 queries from 27 held-out capture sequences, median averaged-pin error 1.90km,
+16.67% within 500m. See [STREET_CHECK.md](STREET_CHECK.md) for selection safeguards,
+coverage, limitations and the local interactive report. These same-provider
+street-only measurements do not replace the independent four-viewpoint baseline.
 
 To complete Part 2, supply user-owned queries labelled with camera positions and
 freeze the rebuilt reference collection and current model/cache revision.

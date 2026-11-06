@@ -8,6 +8,9 @@ COPY scripts /app/scripts
 
 RUN pip install --no-cache-dir uv==0.9.5 && uv sync --frozen --no-dev
 
+# Evaluation code only; private photos, labels and reports stay outside the image.
+COPY eval/*.py /app/eval/
+
 ENV PATH="/app/.venv/bin:$PATH" HF_HOME=/app/data/huggingface
 
 EXPOSE 8000

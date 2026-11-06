@@ -68,3 +68,53 @@ retrieval index or a synthetic request as measured geolocation accuracy.
   confidence calibration or independent eval baseline was produced. Both services
   remain running with the new collection accessible immediately, without restarting
   the API.
+
+## Mac rebuild, 2026-11-06
+
+The user requested restarting with all historical reference files assumed lost,
+then supplied a Mapillary token. The token was moved from the tracked example
+configuration into ignored `swespy/.env` with owner-only permissions; the example
+was restored without credentials. No token was printed or committed.
+
+- Started Docker Desktop and built the existing locked environment for Linux
+  ARM64 on the M1 Mac. Qdrant and the API use the existing localhost-only ports.
+  The pretrained CLIP model loaded successfully.
+- Acquired references with the existing central-Linkoping rectangle, 500-candidate
+  cap, 50-per-cell sampling and 100 KiB filter. Downloaded 399 images without
+  download failures; 317 passed size/decode checks, spanning 42 S2 cells.
+  Raw images occupy approximately 80.99 MiB; excluded originals are retained.
+- Accepted coordinates span latitude 58.390605–58.429535 and longitude
+  15.583464–15.659413. This remains sparse pilot coverage, not full city coverage.
+- Cached CLIP revision: `32bd64288804d66eefd0ccbe215aa642df71cc41`.
+  Indexing uses the unchanged model, 768-dimensional cosine vectors and S2 level
+  14, with batch size 8 and offline model loading. No training or paid compute.
+- Ran the existing suite inside the ARM64 API container after copying the test
+  and evaluation sources into it: **34 passed, 1 private snapshot skipped**.
+  These test sources are not included by the existing Dockerfile.
+- Embedded all 317 accepted references on CPU with four computation threads;
+  embedding and upsert took approximately 18 minutes. Vector shape, finite-value
+  and unit-norm checks passed. Qdrant confirmed 317 points with 768-d cosine
+  vectors. GPU processing is preferable for future bulk jobs; this run incurred
+  no paid compute charges.
+- The first API reference replay exposed an existing response-validation bug:
+  Qdrant returned cosine similarity `1.0000001`, exceeding the schema's maximum.
+  Added a response-only validator clamping overshoot within `1e-6` above 1.
+  Retrieval ranking, vector contents, coordinate aggregation and confidence
+  calculation are unchanged. This is a necessary runtime correction before
+  independent evaluation, not a broader scoring refactor.
+- Regression suite after the fix: **39 passed, 1 private snapshot skipped**.
+  New coverage checks HTTP success for the observed overshoot and continued
+  rejection of invalid scores. Changed source/tests pass Ruff 0.9.1.
+- Rebuilt the API image with the correction and recreated its container. The
+  persisted collection still contains 317 points. `/health`, `/docs` and a real
+  reference replay through `/predict` returned HTTP 200. The replay returned five
+  candidates, top similarity 1.0 and a top candidate exactly at the reference's
+  recorded coordinates; model/search processing took approximately 3.59 seconds.
+  This tests same-image retrieval, not accuracy on unseen photographs or the
+  accuracy of the averaged prediction pin.
+- Approximately 18 GiB of host disk space remained after both builds. Both
+  project services remain running. No unrelated Docker resources were removed.
+
+Independent user-owned evaluation photos and camera-position labels remain
+absent. This rebuild does not establish accuracy on unseen photos and is not a
+reproduction of the earlier 189-reference collection.

@@ -18,3 +18,4 @@ eval/snapshots/*.json
 .uv-cache/
 data/checkpoints/
 data/huggingface/
+data/mapillary_eval/

@@ -1,6 +1,7 @@
 import io
 import os
 
+import pytest
 from httpx import ASGITransport, AsyncClient
 from PIL import Image
 
@@ -12,7 +13,8 @@ def _make_test_png() -> bytes:
     return buf.getvalue()
 
 
-async def test_predict_endpoint_schema() -> None:
+@pytest.mark.parametrize("score", [0.9, 1.0000001])
+async def test_predict_endpoint_schema(monkeypatch, score: float) -> None:
     os.environ["TESTING"] = "true"
 
     from swespy.api.main import create_app
@@ -21,6 +23,14 @@ async def test_predict_endpoint_schema() -> None:
     get_settings.cache_clear()
 
     app = create_app()
+    query = app.state.vector_store.query
+    monkeypatch.setattr(
+        app.state.vector_store,
+        "query",
+        lambda embedding, top_k: [
+            dict(result, similarity_score=score) for result in query(embedding, top_k)
+        ],
+    )
     transport = ASGITransport(app=app)
     image_bytes = _make_test_png()
 
@@ -40,4 +50,5 @@ async def test_predict_endpoint_schema() -> None:
     assert isinstance(data["top_matches"], list)
     assert len(data["top_matches"]) > 0
     first = data["top_matches"][0]
+    assert first["similarity_score"] == min(score, 1.0)
     assert {"lat", "lng", "similarity_score", "s2_cell"}.issubset(first.keys())

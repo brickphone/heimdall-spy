@@ -65,3 +65,53 @@ exist, ordinary pytest reports this gate as skipped, not passed.
 Do not publicly commit private photos, labels or snapshot predictions. Review
 aggregate baseline/provenance for sensitive collection names or other metadata
 before committing it. No baseline.json has been fabricated for missing inputs.
+
+## Automatic Mapillary street sanity check
+
+This is a separate same-provider test, not the independent four-viewpoint baseline
+above. It uses licensed third-party Mapillary photos, never `eval/photos/` or the
+reference ingestion pipeline. No training, reference upsert, confidence calibration
+or baseline/snapshot capture is performed.
+
+With the populated reference collection, private token and API running, execute
+from `swespy/`:
+
+```bash
+docker compose up --build -d
+docker compose exec -T api python -u -m eval.mapillary_check
+```
+
+The default examines at most 2,000 metadata candidates within the existing pilot
+rectangle and downloads at most 90 photos to select 30. It excludes all local raw
+image IDs, every indexed reference capture sequence, exact copies and perceptually
+similar images. Accepted queries are at least 100m apart, with at most three from
+one sequence, selected using a fixed seed before inference. Missing reference
+sequence/attribution data aborts acquisition; an insufficient eligible set is
+reported without relaxing the rules. Perceptual thresholds are conservative
+screening heuristics, not proof that all similar scenes have been detected.
+
+Metadata, attributed query photos, frozen manifest and JSON/HTML reports stay under
+ignored `data/mapillary_eval/`. The HTML contains small attributed photo previews,
+camera labels, predicted pins and inspectable ranked candidate locations. Leaflet
+and OpenStreetMap tiles require internet; the photo cards remain readable offline.
+The index is fingerprinted before/after acquisition and evaluation. Query bytes
+are checked before inference; reports retain the manifest, evaluator and inference
+source hashes and cached model revision. The test calls the running local API;
+keep the same API image/model cache throughout the run.
+
+To select without inference, use `--prepare-only`. To repeat the same frozen test
+without downloading more photos:
+
+```bash
+docker compose exec -T api python -u -m eval.mapillary_check \
+  --manifest data/mapillary_eval/<run>/manifest.json
+```
+
+Reports are timestamped and never overwrite earlier measurements. Coverage metrics
+show what fraction of camera labels have any indexed reference within 100m/500m/2km,
+independent of retrieval. GPS labels may be inaccurate, queries share a provider
+with references, and the sample covers street views only. These results must not
+be presented as general photo-geolocation accuracy or replace user-owned photos.
+
+Source attribution and capture details are retained for each query and indexed
+reference. See Mapillary's [imagery license guidance](https://help.mapillary.com/hc/en-us/articles/115001770409-CC-BY-SA-license-for-open-data).
