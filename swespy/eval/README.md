@@ -308,3 +308,71 @@ external Leaflet/OpenStreetMap resources and needs an internet connection.
 
 This command acquires reference images only. It does not encode them, train a model,
 modify Qdrant, change the application model, or change frozen evaluation datasets.
+
+## Encode, evaluate and search the expanded gallery
+
+The city evaluation uses the unchanged 18 central and 30 earlier held-out photos.
+Preparation hard-links source images into a separate coordinate-labelled dataset;
+source manifests, image bytes and reference/query sequence separation are checked.
+
+From `swespy/`:
+
+```bash
+.venv-benchmark/bin/python -u -m eval.city_benchmark
+PYTORCH_ENABLE_MPS_FALLBACK=1 HF_HUB_OFFLINE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+  .venv-benchmark/bin/python -u -m eval.paper_benchmark \
+  --dataset data/linkoping_dense/city_eval_v1 --name linkoping_city --batch-size 32
+```
+
+The official driver prints its timestamped run folder and resumes cached
+descriptors when rerun. Use that completed folder in the next command:
+
+```bash
+MPLCONFIGDIR="$PWD/data/benchmarks/matplotlib" OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+  .venv-benchmark/bin/python -u -m eval.city_benchmark \
+  --run data/benchmarks/runs/<city-run>
+```
+
+Finalization verifies the dataset fingerprint, saved arrays and independent
+predictions; exports `gallery.faiss` plus `gallery-index.json` in exact index-row
+order; and writes `city-results.json` / `city-summary.html`. It reports all48,
+central18 and legacy30 query cohorts at25m/100m/500m, including coverage and
+Recall@1/5/10/20. The original369-reference central baseline is recomputed using
+identical queries/descriptors and checked against the recorded central result.
+The photo/candidate map is `map.html`; `report.html` retains official25m metrics.
+
+Search a local image against the exported gallery:
+
+```bash
+PYTORCH_ENABLE_MPS_FALLBACK=1 HF_HUB_OFFLINE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+  .venv-benchmark/bin/python -m eval.search_gallery \
+  --index data/benchmarks/runs/<city-run>/gallery-index.json \
+  --image /path/to/photo.jpg --top-k 5
+```
+
+The query uses image pixels only; it does not read GPS metadata or infer location
+from its filename. It returns ranked reference coordinates/attribution and cosine
+similarity, without a weighted pin or calibrated confidence claim. Index checksum,
+row count/dimension and encoder/software/device identity must agree. A changed
+device/environment requires a compatible new export rather than mixing encoders.
+This CLI does not update the API, train weights or contact a generative model.
+
+## Recent ordinary-photo test (Commons only)
+
+See [source constraints and current access status](../../docs/PUBLIC_PHOTO_TEST.md).
+Only capture dates2023-11-06 through2026-11-06 qualify; upload dates do not count.
+The user declined Flickr/paid services. From `swespy/`:
+
+```bash
+.venv-benchmark/bin/python -u -m eval.public_photos acquire
+# Inspect review.html and record actual image-review choices in review.json first.
+.venv-benchmark/bin/python -m eval.public_photos freeze
+PYTORCH_ENABLE_MPS_FALLBACK=1 HF_HUB_OFFLINE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+  .venv-benchmark/bin/python -u -m eval.public_photos evaluate
+```
+
+Metadata/photos/results are ignored under `data/public_eval/recent_linkoping_v1/`.
+Acquisition is currently externally blocked by Wikimedia HTTP403. No public query
+set or new accuracy result has been published. Metadata checkpoints are resumable;
+403 is not retried. Review happens before inference, and the reference index is
+never modified by this workflow.

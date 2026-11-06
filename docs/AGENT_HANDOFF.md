@@ -2,6 +2,33 @@
 
 Updated: 2026-11-06. Read this file before resuming project work.
 
+## Latest user task — recent public photos, externally blocked
+
+The user authorized acquiring/evaluating ordinary Linköping photos captured in the
+last 2–3 years, then explicitly declined Flickr and asked to continue with free
+Wikimedia if possible. Use capture dates 2023-11-06 through 2026-11-06 inclusive;
+never substitute recent upload dates or older imagery. No paid services.
+
+`swespy/eval/public_photos.py` now implements Commons discovery/acquisition,
+date/license/camera-GPS filtering, reference/query duplicate screening, metadata
+stripping, visual review/freeze, and evaluation against the exported city index.
+However **no new photos have been downloaded, frozen or evaluated**: Commons
+Action/REST/file/media requests all returned HTTP403 with its robot-policy notice
+from this environment. The collector records this accurately and exits2 without
+publishing an empty test set. No bypass or substitute Mapillary set was used.
+
+Current status: `swespy/data/public_eval/recent_linkoping_v1/acquisition-status.json`
+(ignored). Once source access works, resume with `.venv-benchmark/bin/python -u -m
+eval.public_photos acquire` from `swespy/`, inspect the generated review sheet,
+record real image-review decisions, freeze, then evaluate. Exact commands and
+constraints are in `docs/PUBLIC_PHOTO_TEST.md`. The agent can review photos; the
+user does not want to walk outside or do intensive manual collection.
+
+Tests:74 passed,one private snapshot skipped. Capture boundaries and misleading
+upload dates are tested, as are camera-GPS/license requirements and HTTP403
+fail-closed behavior. Actual public-photo inference remains unvalidated because
+there are no downloaded queries. Existing model/index/datasets remain unchanged.
+
 ## User objective and preferences
 
 Build a GeoSpy-inspired demo that locates ordinary outdoor photos in Linköping,
@@ -46,13 +73,55 @@ compute or API spend has been authorized. Preserve existing work and datasets.
    updated application/evaluation READMEs. City downloader checks:64 tests passed,
    one private snapshot test skipped; changed modules passed Ruff/mypy.
 
-## Current authorized task — in progress
+## Previous step — expanded-gallery encoding completed
 
-The user asked to do the next step: encode the expanded gallery with MegaLoc and
-evaluate against frozen queries. Also explain RAG/modern ML in a Markdown file.
-This handoff was written **before** starting that work; update it with results
-and exact artifact paths before finishing. Independent public-photo acquisition
-and a production API model switch have not yet been performed.
+Encoded all 3,388 city references and evaluated the frozen central18 + legacy30
+queries (48 total), using native MPS, batch32 and the existing official driver.
+Run: `data/benchmarks/runs/linkoping_city-20261106T130343.492589Z/` relative to
+`swespy/`; immutable evaluation dataset: `data/linkoping_dense/city_eval_v1/`.
+Time:859.5 seconds;3,049 descriptors newly computed,387 cache hits. No training,
+paid compute, production API model switch or source-dataset changes occurred.
+
+Results:
+
+- All48:25m coverage15/48; R@1 11/48 (22.92%), R@5/R@10 13/48 (27.08%).
+- All48:100m R@1 12/48 (25%);500m R@1 17/48 (35.42%), R@10 23/48 (47.92%).
+- Central18:25m R@1 remains11/18 (61.11%), R@10 remains12/18 (66.67%).
+  The369-reference baseline was recomputed from identical saved descriptor subsets
+  and exactly matched the recorded central baseline. Expansion did not improve it.
+- Legacy30:only1 query has a25m positive; R@1 is0/30 at25m and2/30 at500m.
+- These are same-provider development sets, not ordinary-photo accuracy. Missing
+  coverage AND wrong retrievals matter; do not claim gallery growth fixed the demo.
+
+`eval/city_benchmark.py` prepares and finalizes the evaluation. The run now contains
+`gallery.faiss`, `gallery-index.json` (exact index-row mapping and checksums),
+`city-results.json`, `city-summary.html`, `map.html`, official `report.html`, saved
+arrays/predictions/protocol and density comparison. `eval/search_gallery.py` accepts
+an arbitrary local image and returns ranked coordinates/attribution using pixels.
+A real MPS query matched all five saved benchmark candidates. Keep Torch imported
+before FAISS and use one FAISS thread; the opposite import order initially caused
+an isolated native process crash, fixed before completion.
+
+Checks:66 tests passed,one private snapshot skipped; changed modules passed
+Ruff/mypy. Reports were rendered and inspected. Commands are in `swespy/eval/README.md`.
+Detailed results: `docs/CITY_EVALUATION.md`. RAG/ML/training explanation:
+`docs/ML_TECHNOLOGY.md`.
+
+## Next work and the user's latest question
+
+The user remembers training models months ago and asked why we are not training,
+what we are doing now, and when to train. The legacy classifier trainer DOES exist
+in `swespy/swespy/model/trainer.py`, invoked by `scripts/train.py`: frozen CLIP
+vision backbone, trainable projection/head, S2-cell classification. Its split
+holds out entire classes while mapping only training labels, so validation labels
+cannot be resolved. The indexer/API never load that checkpoint. See `AUDIT.md` and
+`ML_TECHNOLOGY.md`; do not deny historical training work or claim old runs finished.
+
+Next: independent ordinary-photo evaluation, targeted coverage inspection, and
+repair the training/split/inference contract before a controlled classifier-head
+or retrieval fine-tuning experiment. Keep test photos untouched and compare with
+these frozen pretrained baselines. No new training or paid cloud run is authorized
+merely by the user's question. An API model switch has not been performed.
 
 ## Local artifacts (ignored by Git; back these up separately)
 

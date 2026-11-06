@@ -24,3 +24,4 @@ data/megaloc/
 data/benchmarks/
 data/linkoping_dense/
 .venv-benchmark/
+data/public_eval/

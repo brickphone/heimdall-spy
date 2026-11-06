@@ -128,7 +128,8 @@ def dense_map(run: Path, dataset: Path, manifest_path: Path) -> dict[str, Any]:
                            "top_matches": matches}, "preview": thumbnail(path),
         })
     map_report = {
-        "model_label": "MegaLoc · dense Linköping · top-ranked reference",
+        "model_label": manifest.get("model_label",
+                                    "MegaLoc · dense Linköping · top-ranked reference"),
         "prediction_label": "Top-ranked reference", "query_sequence_count":
             manifest["query_sequence_count"], "top_k": 10, "hit_radius_m": 25,
         "metrics": summarize(rows), "queries": rows,

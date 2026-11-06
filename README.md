@@ -88,6 +88,10 @@ Keep credentials in ignored `swespy/.env`; use `.env.example` as the template.
 
 ## Data and evaluation
 
+- [Agent handoff](docs/AGENT_HANDOFF.md): current state, recent changes, artifact
+  paths, environment, safeguards and remaining work. Start here when changing agents.
+- [RAG and modern ML explained](docs/ML_TECHNOLOGY.md): what these techniques mean
+  and which ones this project actually uses.
 - [Evaluation setup and commands](swespy/eval/README.md): benchmark environment,
   acquisition, cached inference, metrics and reports.
 - [Paper reproduction and dense Linköping results](docs/PAPER_REPRODUCTION.md):
@@ -101,6 +105,12 @@ Keep credentials in ignored `swespy/.env`; use `.env.example` as the template.
   `coverage.html` and `coverage.geojson`.
 - [Completed city-wide gallery expansion](docs/GALLERY_EXPANSION.md): 3,388
   reference photos across 305 capture sequences, with coverage-map links.
+- [Expanded-gallery evaluation](docs/CITY_EVALUATION.md): the gallery is now
+  encoded and searchable through a separate MegaLoc CLI; all48 frozen queries
+  were measured. The central25m score is unchanged and wider coverage remains weak.
+- [Recent ordinary-photo test](docs/PUBLIC_PHOTO_TEST.md): free Commons-only
+  collector and evaluation commands; live acquisition is currently blocked by
+  Wikimedia HTTP403, so no new public-photo accuracy has been measured.
 
 Downloads, virtual environments, model weights, descriptor caches, generated maps
 and local Qdrant storage are ignored by Git. A clone alone does not restore them;
@@ -110,10 +120,11 @@ gallery; duplicate screening provides additional protection.
 
 ## Next milestone
 
-Encode the expanded Linköping gallery with MegaLoc, evaluate it against frozen
-queries and independent ordinary street/landmark photos, then integrate the tested
-retrieval path into the demo. Geographic prediction inspired by PIGEOTTO and
-evidence-based explanations can be evaluated after that baseline.
+Build an independent ordinary street/landmark photo test set, inspect geographic
+coverage gaps, and repair the legacy training/evaluation contract before a first
+controlled Swedish training experiment. The expanded MegaLoc index is ready for
+local-photo search; the application API still uses CLIP. Geographic prediction
+inspired by PIGEOTTO and evidence-based explanations remain research directions.
 
 ## Research
 

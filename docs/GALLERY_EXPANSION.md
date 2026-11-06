@@ -55,10 +55,15 @@ All accepted file hashes and coordinate-bearing paths were checked, with all
 The benchmark-environment suite passed **64 tests**, with one private snapshot
 test skipped. Changed Python modules passed Ruff and mypy.
 
-## Next step
+## Status at acquisition completion and follow-up
 
 These images have **not yet been encoded into an expanded MegaLoc search index**.
 No training or API model switch took place. Next, encode the frozen gallery with
 the pinned MegaLoc model, measure retrieval against preserved queries, and add an
 independent ordinary-photo test set. New accuracy results must come from that
 evaluation; the earlier 11/18 central result is not a measurement of this gallery.
+
+Follow-up completed: the gallery is now encoded and searchable through a separate
+MegaLoc CLI. See [expanded-gallery evaluation](CITY_EVALUATION.md) for the actual
+48-query results and remaining coverage/retrieval limitations. The API still uses
+CLIP; no local model training has occurred.
