@@ -2,32 +2,138 @@
 
 Updated: 2026-11-06. Read this file before resuming project work.
 
-## Latest user task — recent public photos, externally blocked
+## Latest completed task — free paired-view data pilot
 
-The user authorized acquiring/evaluating ordinary Linköping photos captured in the
-last 2–3 years, then explicitly declined Flickr and asked to continue with free
-Wikimedia if possible. Use capture dates 2023-11-06 through 2026-11-06 inclusive;
-never substitute recent upload dates or older imagery. No paid services.
+The user asked whether training will improve results and authorized the next
+concrete job:check free paired-view sources and build a small data pilot. Do not
+promise improvement. No new backbone fine-tuning or paid compute was run here.
 
-`swespy/eval/public_photos.py` now implements Commons discovery/acquisition,
-date/license/camera-GPS filtering, reference/query duplicate screening, metadata
-stripping, visual review/freeze, and evaluation against the exported city index.
-However **no new photos have been downloaded, frozen or evaluated**: Commons
-Action/REST/file/media requests all returned HTTP403 with its robot-policy notice
-from this environment. The collector records this accurately and exits2 without
-publishing an empty test set. No bypass or substitute Mapillary set was used.
+Read `docs/PAIRED_VIEW_PILOT.md`. `eval/paired_views.py` now supports discover,
+acquire,freeze,report. Uses the configured private Mapillary token and truthful
+Commons bot identification;Flickr remains excluded. The capture-date window
+2023-11-06–2026-11-06 was enforced. Raw discovery metadata is preserved under
+`swespy/data/paired_views/feasibility_v1/` (ignored,includes signed image URLs).
 
-Current status: `swespy/data/public_eval/recent_linkoping_v1/acquisition-status.json`
-(ignored). Once source access works, resume with `.venv-benchmark/bin/python -u -m
-eval.public_photos acquire` from `swespy/`, inspect the generated review sheet,
-record real image-review decisions, freeze, then evaluate. Exact commands and
-constraints are in `docs/PUBLIC_PHOTO_TEST.md`. The agent can review photos; the
-user does not want to walk outside or do intensive manual collection.
+Recent Mapillary discovery found754 unique records/12 sequences,687 after old
+held-out-sequence/nonpano protections. Commons search/category discovery inspected
+173 new file records,13 recent geotagged scenes qualified. The first strict
+cross-day-only proposal yielded too few genuine shared scenes; preserved as
+`data/paired_views/recent_pilot_v1/` and never trained. A second proposal labels
+cross-day and same-capture viewpoint tiers separately. All candidates reviewed
+BEFORE model predictions;GPS proximity alone did not qualify positive pairs.
 
-Tests:74 passed,one private snapshot skipped. Capture boundaries and misleading
-upload dates are tested, as are camera-GPS/license requirements and HTTP403
-fail-closed behavior. Actual public-photo inference remains unvalidated because
-there are no downloaded queries. Existing model/index/datasets remain unchanged.
+Frozen pilot at `swespy/data/paired_views/recent_pilot_v2/`:
+
+- 13 reviewed pairs/26 photos/8 spatial groups:8 train pairs,5 spatial validation.
+- 2 cross-day,11 same-capture pairs. ALL pair photos come from one creator la2.
+  Do not call the spatial pair validation creator-independent.
+- Train/validation groups separated with100m buffer;actual minimum296.6m.
+- 25 new Commons holdout photos:9 photographer keys,16 occupied1km cells,disjoint
+  creators from pair training. No previous proposal/test image IDs reused. Authors
+  may overlap old66 test authors;they are separated from the NEW training creators.
+- 8 separate Mapillary validation photos from other creators show motorway driving;
+  they are not ordinary-photo validation and are absent from the old reference index.
+- 59 used images,all dated2024-03-11 through2026-09-23. New Commons dates through
+  2026-09-01. Pixels have no EXIF/XMP labels;source GPS/heading remain unverified.
+- protocol.json,proposal.json,review.json,manifest.json,contact sheets,report.html
+  preserve selection and evidence. New25 holdout has NOT had predictions run.
+- Original66 and older48 preserved;new images duplicate-screened;no old model,
+  reference index or evaluation membership was changed. Code checks:81 passed,
+  one private snapshot skipped;Ruff/mypy passed.
+
+Important:8 training pairs from ONE photographer is a workflow pilot,not enough
+for a credible fine-tuning gain. Do not start a large GPU run or tune on the new25
+photos. Next expand real shared-content pairs across photographers/places/sessions
+and define a controlled validation-only training protocol. No new accuracy gain
+has been measured in this latest step.
+
+## Latest completed task — failure audit and first actual model training
+
+The user explicitly authorized auditing failures, repairing training/inference and
+running the first controlled geographic-classifier experiment. This work is now
+complete; no paid compute or production API model switch was authorized/performed.
+
+Read `docs/FIRST_TRAINING_EXPERIMENT.md` for full results and exact commands.
+
+- Deterministic15-case failure audit:five failures each with nearest references
+  <=100m,100–500m,>500m. Inspected query,nearest2,top1,best top5 images before
+  training. Many nearby views show different subjects; proximity overstates
+  usable visual overlap. Source EXIF GPS agrees within0.054m for14/15 cases;
+  one lacks EXIF GPS. This is metadata consistency,not independent ground truth.
+- Audit artifacts:`swespy/data/failure_audit/recent66_v1/`,including evidence.html,
+  fixed sample,contact sheets,source EXIF,label deltas,per-case assessment.
+- Repaired legacy `Trainer.split_by_cell` to split whole captures while keeping
+  classes known; missing sequence metadata fails explicitly. CLIP encoder and
+  projection now fully frozen;head-only optimization;best checkpoint restored;
+  explicit `GeoClassifier.load` inference. No default API switch.
+- Actual experiment trained a143-class1km geographic linear head on cached
+  MegaLoc descriptors,not a PIGEOTTO reproduction or backbone fine-tuning.
+  Splits:2730 training,295 validation,363 internal test images,with disjoint
+  sequences. All66 public queries stayed out of training and tuning.
+- Best epoch3:validation cell accuracy57.97%,internal test30.03%. Selected
+  fusion weight0 using Mapillary validation,so combined retrieval is unchanged.
+- Public66 first-choice500m:retrieval7/66,trained head14/66,combined7/66.
+  But always guessing the most common TRAINING cell gets15/66. Median error:
+  retrieval3643m,head2089m,constant majority-cell1018m. These post-hoc prior checks
+  were NOT used for tuning. No useful learned-location improvement established;
+  do not advertise the14/66 versus7/66 comparison without this baseline.
+- Model/results:`swespy/data/classifier/linkoping_linear_v1/` has head.pt,
+  protocol.json,results.json,report.html,classifier-map.html and prior diagnostic.
+  Safe checkpoint roundtrip is exact. Initial NumPy-scalar metadata save/load
+  failed; fixed to plain floats and reran the same seed/protocol before evaluating
+  public queries. Failed artifact preserved; do not load it.
+- `eval/search_gallery.py --classifier .../head.pt` loads the trained model and
+  returns geographic candidates and combined matches. Actual native MPS image
+  inference reproduced the experiment's results. The API still uses CLIP.
+- Checks:78 tests passed,one private snapshot skipped;changed modules Ruff/mypy
+  clean. No held-out photo/label/reference edits;no paid services.
+
+Next:improve visual reference/training coverage for pedestrian/landmark views and
+add a fresh spatially balanced,creator-separated holdout before further claims.
+The existing66 are development evidence and must remain out of training. Additional
+model tuning on them would compromise evaluation; do not keep fishing for a win.
+
+## Latest task — recent ordinary-photo evaluation completed
+
+User constraints:only photos captured in the last2–3 years; free Commons only;
+Flickr/paid services explicitly declined. The HTTP403 was fixed: our original
+user-agent lacked contact information. Use the truthful HeimdallSpyResearchBot
+identifier with https://github.com/brickphone/heimdall-spy
+and HTTP library version, following Wikimedia's policy. Actual API and media
+requests now work. Do not tell the user source access is still blocked.
+
+`eval/public_photos.py` acquired date/GPS/license-filtered metadata and JPEGs.
+A first broad75-candidate proposal at `data/public_eval/recent_linkoping_v1/`
+contained events/portraits/interiors and was never frozen or evaluated. A tighter
+scene filter (recorded in protocol) produced75 candidates under
+`data/public_eval/recent_linkoping_streets_v1/`. Codex inspected all five contact
+sheets, excluded9 inappropriate images BEFORE inference and froze66 outdoor photos
+from15 creators. Review decisions/timestamp and hashes are retained. Actual dates:
+2023-11-21 through2026-09-01; years2023:1,2024:11,2025:21,2026:33. Query JPEGs have
+no EXIF/XMP labels. Do not train on these held-out photos.
+
+Completed MPS evaluation against the unchanged3,388-reference MegaLoc index:
+
+- 25m:coverage3/66;first-choice0/66;top-five0/66.
+- 100m:coverage13/66;first-choice1/66 (1.52%);top-five2/66 (3.03%).
+- 500m:coverage56/66;first-choice7/66 (10.61%);top-five14/66 (21.21%).
+- Median first-choice error3,643m. These results are poor; central Mapillary61.1%
+  accuracy did not transfer. Both coverage and incorrect retrieval matter.
+
+Artifacts relative to `swespy/`:
+`data/public_eval/recent_linkoping_streets_v1/runs/20261106T135549400456Z/`
+contains raw results and the attributed66-query candidate map. Source manifests,
+metadata checkpoints, images and pre-inference review sheets live in the dataset
+root (all ignored). `docs/PUBLIC_PHOTO_TEST.md` records full results/limitations
+and resume commands. Local CLI can evaluate again using cached descriptors.
+
+Checks:75 tests passed,one private snapshot skipped; changed code passed Ruff/mypy.
+All66 query hashes/dates and lack of EXIF verified; source-gallery/exported-index
+fingerprints preserved. No training, paid services, index writes or API switch.
+
+Next:inspect failures/coverage against this actual-use-case baseline, then repair
+the training/evaluation/inference contract for a controlled classifier or retrieval
+fine-tuning experiment. Do not remove failures after seeing model predictions.
 
 ## User objective and preferences
 
@@ -49,8 +155,9 @@ compute or API spend has been authorized. Preserve existing work and datasets.
 - `swespy/eval/paper_benchmark.py`: pinned official VPR evaluator, cached
   descriptors, MPS compatibility checks, FAISS exact search, 25m Recall@K.
 - PIGEON/PIGEOTTO were discussed earlier but are not implemented in current
-  source. No Swedish fine-tuning, geographic prediction model, LLM or RAG answer
-  generation is deployed. Do not confuse reference indexing with training.
+  source. A geographic head has now been trained and connected to explicit CLI inference,
+  but has not beaten a constant geographic prior or replaced the API. No backbone
+  fine-tuning, LLM or RAG answer generation is deployed.
 
 ## Recent completed work
 
@@ -112,16 +219,17 @@ Detailed results: `docs/CITY_EVALUATION.md`. RAG/ML/training explanation:
 The user remembers training models months ago and asked why we are not training,
 what we are doing now, and when to train. The legacy classifier trainer DOES exist
 in `swespy/swespy/model/trainer.py`, invoked by `scripts/train.py`: frozen CLIP
-vision backbone, trainable projection/head, S2-cell classification. Its split
-holds out entire classes while mapping only training labels, so validation labels
-cannot be resolved. The indexer/API never load that checkpoint. See `AUDIT.md` and
+vision backbone, trainable projection/head, S2-cell classification. Its OLD split
+held out entire classes while mapping only training labels. That split and the
+explicit checkpoint inference contract have now been repaired; see the latest task.
+The default API still does not load a classifier checkpoint. See `AUDIT.md` and
 `ML_TECHNOLOGY.md`; do not deny historical training work or claim old runs finished.
 
 Next: independent ordinary-photo evaluation, targeted coverage inspection, and
 repair the training/split/inference contract before a controlled classifier-head
 or retrieval fine-tuning experiment. Keep test photos untouched and compare with
-these frozen pretrained baselines. No new training or paid cloud run is authorized
-merely by the user's question. An API model switch has not been performed.
+these frozen pretrained baselines. The user subsequently authorized the controlled first training experiment, now
+completed above. Paid cloud spend and an API switch have not been authorized.
 
 ## Local artifacts (ignored by Git; back these up separately)
 

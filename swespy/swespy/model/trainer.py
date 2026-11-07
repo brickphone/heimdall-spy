@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import torch
 from loguru import logger
@@ -17,12 +16,15 @@ from torch.utils.data import DataLoader, Dataset
 from transformers import CLIPModel, CLIPProcessor
 
 from swespy.config import Settings
+from swespy.model.geo_head import sequence_split
 
 
 class GeoDataset(Dataset):
     """Dataset for image-to-cell classification."""
 
-    def __init__(self, df: pd.DataFrame, processor: CLIPProcessor, label_to_idx: dict[str, int]) -> None:
+    def __init__(
+        self, df: pd.DataFrame, processor: CLIPProcessor, label_to_idx: dict[str, int]
+    ) -> None:
         self.df = df.reset_index(drop=True)
         self.processor = processor
         self.label_to_idx = label_to_idx
@@ -45,14 +47,36 @@ class GeoClassifier(nn.Module):
     def __init__(self, clip_model_name: str, num_cells: int) -> None:
         super().__init__()
         self.clip = CLIPModel.from_pretrained(clip_model_name)
-        for param in self.clip.vision_model.parameters():
+        for param in self.clip.parameters():
             param.requires_grad = False
         self.head = nn.Linear(self.clip.config.projection_dim, num_cells)
 
+    def train(self, mode: bool = True) -> GeoClassifier:
+        super().train(mode)
+        self.clip.eval()  # Frozen features must not change with training/dropout mode.
+        return self
+
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """Compute logits for S2 classes."""
-        features = self.clip.get_image_features(pixel_values=pixel_values)
+        with torch.no_grad():
+            features = self.clip.get_image_features(pixel_values=pixel_values)
         return self.head(features)
+
+    @classmethod
+    def load(cls, path: Path, device: str = "cpu") -> TrainArtifacts:
+        """Explicit inference path for the trained head, using its recorded class order."""
+        saved = torch.load(path, map_location="cpu", weights_only=True)
+        if saved.get("format") != "clip_cell_classifier_v1":
+            raise ValueError(
+                "Unsupported classifier checkpoint; retrain with the repaired contract"
+            )
+        labels = saved["label_to_idx"]
+        if sorted(labels.values()) != list(range(len(labels))):
+            raise ValueError("Invalid classifier class mapping")
+        model = cls(saved["clip_model_name"], len(labels)).to(device)
+        model.head.load_state_dict(saved["head_state"], strict=True)
+        model.eval()
+        return TrainArtifacts(model, labels)
 
 
 @dataclass
@@ -73,48 +97,57 @@ class Trainer:
     def split_by_cell(
         df: pd.DataFrame,
     ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-        """Split data by S2 cell to avoid geographic leakage."""
-        cells = df["s2_cell"].dropna().unique()
-        rng = np.random.default_rng(42)
-        rng.shuffle(cells)
+        """Keep output cells known while holding out complete capture sequences.
 
-        n_cells = len(cells)
-        train_end = int(0.8 * n_cells)
-        val_end = int(0.9 * n_cells)
-
-        train_cells = set(cells[:train_end])
-        val_cells = set(cells[train_end:val_end])
-        test_cells = set(cells[val_end:])
-
-        train_df = df[df["s2_cell"].isin(train_cells)].copy()
-        val_df = df[df["s2_cell"].isin(val_cells)].copy()
-        test_df = df[df["s2_cell"].isin(test_cells)].copy()
-        return train_df, val_df, test_df
+        Historical method name retained for callers. Splitting output classes
+        themselves made validation labels impossible to resolve.
+        """
+        if (
+            not {"s2_cell", "sequence"}.issubset(df.columns)
+            or df[["s2_cell", "sequence"]].isna().any().any()
+        ):
+            raise ValueError(
+                "Training metadata requires S2 cells and capture sequences; "
+                "do not substitute a random frame split"
+            )
+        folds = sequence_split(
+            df["s2_cell"].astype(str).tolist(), df["sequence"].astype(str).tolist()
+        )
+        return tuple(df.iloc[indices].copy() for indices in folds)  # type: ignore[return-value]
 
     def _make_loader(
-        self, df: pd.DataFrame, processor: CLIPProcessor, label_to_idx: dict[str, int], shuffle: bool
+        self,
+        df: pd.DataFrame,
+        processor: CLIPProcessor,
+        label_to_idx: dict[str, int],
+        shuffle: bool,
     ) -> DataLoader:
         dataset = GeoDataset(df=df, processor=processor, label_to_idx=label_to_idx)
-        return DataLoader(dataset, batch_size=self.settings.batch_size, shuffle=shuffle, num_workers=0)
+        return DataLoader(
+            dataset, batch_size=self.settings.batch_size, shuffle=shuffle, num_workers=0
+        )
 
     def train(self, epochs: int = 5) -> TrainArtifacts:
         """Train and persist the best model checkpoint."""
         meta_path = self.project_root / "data" / "metadata" / "images.parquet"
         df = pd.read_parquet(meta_path)
         train_df, val_df, _test_df = self.split_by_cell(df)
+        torch.manual_seed(42)
 
         labels = sorted(train_df["s2_cell"].unique().tolist())
         label_to_idx = {label: idx for idx, label in enumerate(labels)}
 
         processor = CLIPProcessor.from_pretrained(self.settings.clip_model_name)
-        model = GeoClassifier(self.settings.clip_model_name, num_cells=len(label_to_idx)).to(self.device)
+        model = GeoClassifier(self.settings.clip_model_name, num_cells=len(label_to_idx)).to(
+            self.device
+        )
 
         train_loader = self._make_loader(train_df, processor, label_to_idx, shuffle=True)
         val_loader = self._make_loader(val_df, processor, label_to_idx, shuffle=False)
 
         criterion = nn.CrossEntropyLoss()
         optimizer = AdamW(
-            model.parameters(),
+            model.head.parameters(),
             lr=self.settings.train_learning_rate,
             weight_decay=self.settings.train_weight_decay,
         )
@@ -124,7 +157,9 @@ class Trainer:
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         best_path = checkpoint_dir / "best_model.pt"
 
-        best_val_acc = 0.0
+        if best_path.exists():
+            raise ValueError("Refusing to overwrite an existing classifier checkpoint")
+        best_val_acc = -1.0
         for epoch in range(epochs):
             model.train()
             running_loss = 0.0
@@ -142,14 +177,28 @@ class Trainer:
             scheduler.step()
             avg_loss = running_loss / max(1, len(train_loader))
             val_acc = self._evaluate_accuracy(model, val_loader)
-            logger.info("Epoch {}/{} - loss: {:.4f} - val_acc: {:.4f}", epoch + 1, epochs, avg_loss, val_acc)
+            logger.info(
+                "Epoch {}/{} - loss: {:.4f} - val_acc: {:.4f}", epoch + 1, epochs, avg_loss, val_acc
+            )
 
             if val_acc > best_val_acc:
                 best_val_acc = val_acc
-                torch.save({"model_state": model.state_dict(), "label_to_idx": label_to_idx}, best_path)
+                torch.save(
+                    {
+                        "format": "clip_cell_classifier_v1",
+                        "head_state": {
+                            k: v.detach().cpu().clone() for k, v in model.head.state_dict().items()
+                        },
+                        "clip_model_name": self.settings.clip_model_name,
+                        "label_to_idx": label_to_idx,
+                    },
+                    best_path,
+                )
                 logger.info("Saved new best checkpoint to {}", best_path)
 
-        return TrainArtifacts(model=model, label_to_idx=label_to_idx)
+        if not best_path.exists():
+            raise RuntimeError("No trained checkpoint was produced")
+        return GeoClassifier.load(best_path, str(self.device))
 
     def _evaluate_accuracy(self, model: GeoClassifier, loader: DataLoader) -> float:
         model.eval()

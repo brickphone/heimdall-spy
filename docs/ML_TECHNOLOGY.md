@@ -33,7 +33,7 @@ clues should be inspectable.
 
 | Technique | Plain-language meaning | Project status |
 | --- | --- | --- |
-| Pretrained models / transfer learning | Reuse features learned on large external datasets | Yes: CLIP in the API, MegaLoc in experiments; no local weight updates |
+| Pretrained models / transfer learning | Reuse features learned on large external datasets | Yes: CLIP in the API, MegaLoc frozen in experiments; a geographic head is now locally trained |
 | Embeddings / representation learning | Encode an image as numbers suitable for comparison | Yes: CLIP 768-D, MegaLoc 8,448-D |
 | Vision transformers | Image models that process patches using attention | Yes: the CLIP and MegaLoc encoders use transformer architectures |
 | Contrastive learning | Learn to bring related examples closer and separate unrelated ones | Part of the relevant pretrained-model research; we are not running a contrastive training job |
@@ -42,8 +42,8 @@ clues should be inspectable.
 | GPU inference | Run a trained model to compute descriptors | Yes: native Apple MPS for MegaLoc; CPU by default in the container API; CUDA paths exist |
 | Cached inference | Reuse descriptors for unchanged inputs rather than encode again | Yes: resumable caches record model/software identity and input hashes |
 | Held-out evaluation | Test on examples kept out of the reference/training set | Yes: frozen query sets, capture-sequence exclusion and duplicate checks; currently same-provider development tests |
-| Geographic prediction | Infer geographic regions from clues beyond matching a known scene | Not implemented; PIGEON/PIGEOTTO are research directions |
-| Fine-tuning | Change pretrained weights using our own training examples | Not performed in the current rebuilt pipeline |
+| Geographic prediction | Infer geographic regions from clues beyond matching a known scene | A first1km geographic head is trained; it did not beat a constant-area prior. PIGEON/PIGEOTTO remain research directions |
+| Fine-tuning | Change pretrained weights using our own training examples | A frozen-backbone geographic head has been trained; backbone fine-tuning has not been performed |
 | LoRA / parameter-efficient fine-tuning | Train a small set of extra parameters instead of all model weights | Not implemented or currently needed for gallery indexing |
 | Reranking / geometric verification | Re-examine retrieved candidates using stronger comparisons | Not implemented as a second model stage |
 | Geographic clustering | Group nearby location candidates before choosing an estimate | Not implemented in the current API; planned alternative to averaging scattered matches |
@@ -75,27 +75,29 @@ classifier to CLIP. The vision backbone is frozen; the projection and classifier
 can be trained. It is related to geographic classification, but it is not a
 reproduction of the full PIGEON/PIGEOTTO training method.
 
-Two concrete issues explain why we have not simply rerun it:
+Before the first controlled training experiment, two concrete issues prevented simply rerunning it:
 
-1. Its split puts entire S2 classes in disjoint training and validation sets, but
+1. Its old split put entire S2 classes in disjoint training and validation sets, but
    the class-index map is built only from training labels. Validation examples
-   therefore contain labels absent from that map. This is not a valid closed-set
+   therefore contained labels absent from that map. This is not a valid closed-set
    classifier evaluation and can raise a label lookup error.
-2. The current indexer and API instantiate the original pretrained CLIP encoder;
+2. The default indexer and API instantiate the original pretrained CLIP encoder;
    they do not load the saved classifier checkpoint. Running that training script
    would not improve the current API's predictions.
 
 The [existing audit](AUDIT.md) records these issues. The code supports the user's
 memory of earlier training work; it does not establish which historical runs
-finished or recover deleted checkpoints. We should repair the training/evaluation
-contract and wire any useful trained model into inference before treating a
-training run as a product improvement.
+finished or recover deleted checkpoints. The split and explicit checkpoint loading have now been repaired. A separate
+head was trained on cached MegaLoc features and connected to CLI inference; see
+[the first training experiment](FIRST_TRAINING_EXPERIMENT.md). It did not beat a
+constant geographic prior and has not replaced the default API.
 
 ## When should we train our own model?
 
-The first deliberate training experiment should follow the expanded-gallery
-baseline and a frozen ordinary-photo evaluation set. We then have a fair way to
-answer whether training improves the actual use case.
+The first deliberate training experiment has now followed the expanded-gallery
+baseline and frozen ordinary-photo set. It improved some thresholds over retrieval
+but did not beat a constant-area guess. Further training needs better visual
+coverage, appropriate cross-view pairs and a fresh independent holdout.
 
 Two useful experiments serve different purposes:
 

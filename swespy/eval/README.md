@@ -359,7 +359,7 @@ This CLI does not update the API, train weights or contact a generative model.
 
 ## Recent ordinary-photo test (Commons only)
 
-See [source constraints and current access status](../../docs/PUBLIC_PHOTO_TEST.md).
+See [source constraints and results](../../docs/PUBLIC_PHOTO_TEST.md).
 Only capture dates2023-11-06 through2026-11-06 qualify; upload dates do not count.
 The user declined Flickr/paid services. From `swespy/`:
 
@@ -371,8 +371,53 @@ PYTORCH_ENABLE_MPS_FALLBACK=1 HF_HUB_OFFLINE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_TH
   .venv-benchmark/bin/python -u -m eval.public_photos evaluate
 ```
 
-Metadata/photos/results are ignored under `data/public_eval/recent_linkoping_v1/`.
-Acquisition is currently externally blocked by Wikimedia HTTP403. No public query
-set or new accuracy result has been published. Metadata checkpoints are resumable;
-403 is not retried. Review happens before inference, and the reference index is
-never modified by this workflow.
+Metadata/photos/results are ignored under `data/public_eval/recent_linkoping_streets_v1/`.
+The initial Wikimedia HTTP403 was fixed by supplying a truthful bot user-agent
+with the real project/contact URL. Metadata checkpoints are resumable;403 is not
+retried. The current frozen set contains66 visually reviewed recent outdoor photos and
+has been evaluated. Results and limitations are in the linked report. Review
+happens before inference, and the reference index is never modified by this workflow.
+
+## Failure audit and first geographic-head training
+
+See [protocol, fixes and measured results](../../docs/FIRST_TRAINING_EXPERIMENT.md).
+The audit uses15 fixed, stratified failures; it does not remove examples from the
+frozen66-photo set. The trained geographic head uses cached MegaLoc descriptors,
+whole-capture validation/test splits, and no public queries during training/tuning.
+
+```bash
+MPLCONFIGDIR="$PWD/data/benchmarks/matplotlib" .venv-benchmark/bin/python -m eval.failure_audit
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 .venv-benchmark/bin/python -u -m eval.train_geo_head
+PYTORCH_ENABLE_MPS_FALLBACK=1 HF_HUB_OFFLINE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+  .venv-benchmark/bin/python -m eval.search_gallery \
+  --index data/benchmarks/runs/linkoping_city-20261106T130343.492589Z/gallery-index.json \
+  --classifier data/classifier/linkoping_linear_v1/head.pt --image /path/to/photo.jpg
+```
+
+The head predicts approximate1km grid centres; its scores are uncalibrated.
+Checkpoint inference verifies the encoder identity and class order. Validation
+selected a zero reranking weight, so combined matches equal the retrieval baseline.
+The trained head did not beat a constant majority-training-area guess. Do not
+promote the model or retune it on the66 development photos based on a headline
+improvement over retrieval alone. No production API switch was made.
+
+
+## Recent paired-view data pilot
+
+See [source feasibility,reviewed data and limits](../../docs/PAIRED_VIEW_PILOT.md).
+The pilot freezes13 positive pairs (8 training,5 spatial validation),25 new Commons
+holdout photos and8 separate Mapillary driving-validation photos. All accepted
+pair images come from one photographer. No new accuracy improvement is claimed.
+
+```bash
+.venv-benchmark/bin/python -m eval.paired_views discover
+.venv-benchmark/bin/python -m eval.paired_views acquire
+# Review all candidate images and write real decisions to review.json before freeze.
+.venv-benchmark/bin/python -m eval.paired_views freeze
+.venv-benchmark/bin/python -m eval.paired_views report
+```
+
+Sources and images are ignored under `data/paired_views/`. Original66 and old48
+queries stay protected. Same-session viewpoint pairs are labelled separately from
+cross-day pairs and are not independent test examples. The25 new Commons photos
+remain unused for inference until a controlled training experiment is specified.

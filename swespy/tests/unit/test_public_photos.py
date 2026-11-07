@@ -2,9 +2,11 @@
 
 import json
 from datetime import date
+from io import BytesIO
 
 import httpx
 import pytest
+from PIL import Image
 
 from eval.public_photos import SINCE, UNTIL, acquire, candidate, taken_date
 
@@ -58,6 +60,8 @@ async def test_403_is_not_retried_or_published_as_an_empty_test_set(tmp_path, mo
     calls = []
 
     def blocked(request):
+        assert "https://github.com/brickphone/heimdall-spy" in request.headers["User-Agent"]
+        assert "Bot/" in request.headers["User-Agent"]
         calls.append(request)
         return httpx.Response(403, text="Please respect our robot policy")
 
@@ -73,3 +77,45 @@ async def test_403_is_not_retried_or_published_as_an_empty_test_set(tmp_path, mo
     assert not saved["photos_frozen"]
     assert not (root/"manifest.json").exists()
     assert not (root/"selection.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_successful_acquisition_strips_image_metadata_before_review(tmp_path, monkeypatch):
+    import eval.public_photos as module
+
+    gallery = tmp_path/"gallery"
+    gallery.mkdir()
+    (gallery/"manifest.json").write_text('{"references": []}')
+    monkeypatch.setattr(module, "DEFAULT_ROOT", gallery)
+    image = Image.new("RGB", (40, 30), "red")
+    exif = Image.Exif()
+    exif[36867] = "2025:04:24 13:10:00"
+    exif[270] = "Location answer key must not reach the encoder"
+    buffer = BytesIO()
+    image.save(buffer, format="JPEG", exif=exif)
+
+    def respond(request):
+        if request.url.host == "upload.wikimedia.org":
+            return httpx.Response(200, content=buffer.getvalue())
+        if request.url.params.get("list") == "geosearch":
+            return httpx.Response(200, json={"query": {"geosearch": [{"pageid": 123}]}})
+        return httpx.Response(200, json={"query": {"pages": {"123": page()}}})
+
+    async def no_sleep(_):
+        pass
+
+    monkeypatch.setattr(module.asyncio, "sleep", no_sleep)
+    original = httpx.AsyncClient
+    monkeypatch.setattr(module.httpx, "AsyncClient",
+                        lambda **kwargs: original(transport=httpx.MockTransport(respond), **kwargs))
+    root = tmp_path/"public"
+    await acquire(root, SINCE, UNTIL, 1)
+    saved = json.loads((root/"selection.json").read_text())
+    query = saved["queries"][0]
+    assert query["capture_date"] == "2025-04-24"
+    assert query["lat"] == 58.411793
+    with Image.open(root/query["path"]) as pixels:
+        assert not pixels.getexif()
+    assert not (root/"manifest.json").exists()  # Review must precede freezing/inference.
+    assert json.loads((root/"acquisition-status.json").read_text())["state"] == \
+        "awaiting_image_review"

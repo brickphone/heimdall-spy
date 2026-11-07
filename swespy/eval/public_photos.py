@@ -10,6 +10,7 @@ import json
 import math
 import re
 import sys
+import time
 from collections import Counter
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -25,12 +26,18 @@ from eval.megaloc_compare import MegaLocEmbedder, file_hash
 from eval.metrics import distance_m, summarize
 from eval.run_eval import write_new
 
-ROOT = Path("data/public_eval/recent_linkoping_v1")
+ROOT = Path("data/public_eval/recent_linkoping_streets_v1")
 INDEX = Path("data/benchmarks/runs/linkoping_city-20261106T130343.492589Z/gallery-index.json")
 API = "https://commons.wikimedia.org/w/api.php"
 SINCE, UNTIL = date(2023, 11, 6), date(2026, 11, 6)
 UA = ("HeimdallSpyResearchBot/0.1 (https://github.com/brickphone/heimdall-spy; "
       "local photo evaluation) httpx/" + httpx.__version__)
+SCENE_EXCLUSIONS = (
+    "interior", "interiör", "portrait", "presskonferens", "repetition", "repetion",
+    "aerial", "flygfoto", "floor plan", "historical map", "cosplay", "cosplayer",
+    "närcon", "ncs24", "flygdagarna", "melodifestivalen", "rehears", "concert",
+    "konsert", "läktarorgel", "kororgel", "church organ", "painting", "olja på duk",
+)
 
 
 def plain(value: str) -> str:
@@ -75,9 +82,7 @@ def candidate(page: dict[str, Any], since: date, until: date) -> dict[str, Any] 
             return None
         description = plain(ext.get("ImageDescription", ""))
         words = (page["title"] + " " + description).casefold()
-        if any(word in words for word in
-               ("interior", "interiör", "portrait", "presskonferens", "repetition",
-                "aerial", "flygfoto", "floor plan", "historical map")):
+        if any(word in words for word in SCENE_EXCLUSIONS):
             return None
         return {
             "image_id": f"commons-{page['pageid']}", "title": page["title"],
@@ -104,6 +109,7 @@ def status(root: Path, **data: Any) -> None:
 
 async def request(client: httpx.AsyncClient, params: dict[str, Any]) -> dict[str, Any]:
     for attempt in range(4):
+        started = time.monotonic()
         response = await client.get(API, params={"action": "query", "format": "json",
                                                 "maxlag": 5, **params})
         if response.status_code in (429, 500, 502, 503, 504) and attempt < 3:
@@ -113,6 +119,9 @@ async def request(client: httpx.AsyncClient, params: dict[str, Any]) -> dict[str
         payload = response.json()
         if "error" in payload:
             raise ValueError(f"Commons API error: {payload['error'].get('code')}")
+        if time.monotonic() - started > 1:
+            # Wikimedia asks clients to pause after expensive Action API requests.
+            await asyncio.sleep(5)
         return payload
     raise RuntimeError("Commons request retries exhausted")
 
@@ -126,6 +135,7 @@ async def acquire(root: Path, since: date, until: date, target: int) -> None:
                 "download_limit": 200, "selection": "SHA256 ID order; <=15/creator; "
                 ">=25m between selected query camera labels; metadata filtering before inference",
                 "gallery_manifest_sha256": file_hash(DEFAULT_ROOT/"manifest.json")}
+    protocol["scene_exclusions"] = list(SCENE_EXCLUSIONS)
     if (root/"protocol.json").exists():
         if json.loads((root/"protocol.json").read_text()) != protocol:
             raise ValueError("Existing public-photo acquisition protocol differs; use a new root")
@@ -134,6 +144,7 @@ async def acquire(root: Path, since: date, until: date, target: int) -> None:
     if (root/"selection.json").exists():
         print("Selection exists; inspect review.html and prepare review.json before freezing")
         return
+    status(root, state="acquiring", photos_frozen=False, user_agent=UA)
     cache = root/"metadata"
     cache.mkdir(exist_ok=True)
     rejected: Counter[str] = Counter()
@@ -284,6 +295,7 @@ def evaluate(root: Path, index_manifest: Path) -> None:
         raise ValueError("Encoder identity differs from gallery")
     vectors = embedder.embed([root/q["path"] for q in queries],
                              [q["sha256"] for q in queries], batch_size=4)
+    faiss.omp_set_num_threads(1)  # The model loader sets Torch CPU threads during setup.
     index = faiss.read_index(str(index_path))
     if index.ntotal != len(refs) or index.d != vectors.shape[1]:
         raise ValueError("Index shape/mapping differs")

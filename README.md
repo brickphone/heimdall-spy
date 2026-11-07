@@ -62,7 +62,8 @@ optional benchmark environment avoids changing the application's dependency lock
 
 PIGEON/PIGEOTTO are relevant research directions for broader geographic prediction,
 but they are **not implemented in the current source**. There is no deployed
-vision-language explanation model or Swedish fine-tuned model.
+vision-language explanation model or Swedish backbone fine-tuning. A small trained
+geographic head is available through explicit CLI inference, with measured limits.
 
 ## Start the API
 
@@ -109,8 +110,15 @@ Keep credentials in ignored `swespy/.env`; use `.env.example` as the template.
   encoded and searchable through a separate MegaLoc CLI; all48 frozen queries
   were measured. The central25m score is unchanged and wider coverage remains weak.
 - [Recent ordinary-photo test](docs/PUBLIC_PHOTO_TEST.md): free Commons-only
-  collector and evaluation commands; live acquisition is currently blocked by
-  Wikimedia HTTP403, so no new public-photo accuracy has been measured.
+  collector and completed evaluation of66 reviewed outdoor photos captured since
+  November2023. Current results are poor:1/66 first-choice matches within100m.
+- [Failure audit and first training experiment](docs/FIRST_TRAINING_EXPERIMENT.md):
+  a trained143-cell geographic head and checkpoint inference, compared with
+  retrieval and constant-location priors. It did not beat the majority-area prior.
+- [Recent paired-view data pilot](docs/PAIRED_VIEW_PILOT.md):13 reviewed pairs and
+  25 fresh Commons holdout photos. Only8 training pairs remain after separation;
+  this validates the workflow, not a claim of improved geolocation.
+
 
 Downloads, virtual environments, model weights, descriptor caches, generated maps
 and local Qdrant storage are ignored by Git. A clone alone does not restore them;
@@ -120,11 +128,12 @@ gallery; duplicate screening provides additional protection.
 
 ## Next milestone
 
-Build an independent ordinary street/landmark photo test set, inspect geographic
-coverage gaps, and repair the legacy training/evaluation contract before a first
-controlled Swedish training experiment. The expanded MegaLoc index is ready for
-local-photo search; the application API still uses CLIP. Geographic prediction
-inspired by PIGEOTTO and evidence-based explanations remain research directions.
+Improve photographic reference/training coverage for pedestrian views and
+landmarks, then add a fresh spatially balanced, creator-separated holdout. The
+first geographic-head experiment is complete and did not beat a constant-area
+prior. Existing API inference remains CLIP; MegaLoc and the trained head can be
+searched explicitly through the CLI. PIGEOTTO-style training and cross-view
+retrieval fine-tuning remain research directions.
 
 ## Research
 

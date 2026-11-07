@@ -25,3 +25,6 @@ data/benchmarks/
 data/linkoping_dense/
 .venv-benchmark/
 data/public_eval/
+data/failure_audit/
+data/classifier/
+data/paired_views/
