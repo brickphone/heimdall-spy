@@ -9,11 +9,10 @@ from pathlib import Path
 
 import numpy as np
 
-from eval.mapillary_check import thumbnail
-from eval.megaloc_compare import file_hash
+from eval.common import thumbnail, write_new
 from eval.metrics import distance_m
 from eval.public_photos import INDEX, ROOT
-from eval.run_eval import write_new
+from swespy.model.megaloc import file_hash
 
 REPORT = ROOT / "runs/20261106T135549400456Z/results.json"
 OUT = Path("data/failure_audit/recent66_v1")

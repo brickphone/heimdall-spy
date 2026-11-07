@@ -12,11 +12,11 @@ from typing import Any
 import numpy as np
 
 from eval.benchmark_report import positives_for, render, xy
+from eval.common import write_new
 from eval.dense_linkoping import OLD_MANIFEST, formatted_link
 from eval.expand_linkoping import CENTRAL, DEFAULT_ROOT
-from eval.megaloc_compare import DIM, checked_vectors, file_hash
 from eval.paper_benchmark import dataset_identity, recall_metrics
-from eval.run_eval import write_new
+from swespy.model.megaloc import DIM, checked_vectors, file_hash
 
 DATASET = Path("data/linkoping_dense/city_eval_v1")
 

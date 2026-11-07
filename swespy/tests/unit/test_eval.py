@@ -6,9 +6,9 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from eval.common import write_new
 from eval.dataset import DatasetError, Photo, load_dataset
 from eval.metrics import distance_m, observation, summarize
-from eval.run_eval import compare_baseline, compare_snapshot, write_new
 
 
 def dataset(tmp_path: Path, row: str) -> tuple[Path, Path]:
@@ -122,54 +122,3 @@ def test_artifacts_never_overwritten(tmp_path: Path) -> None:
     with pytest.raises(FileExistsError):
         write_new(path, {"value": 2})
     assert json.loads(path.read_text()) == {"value": 1}
-
-
-def test_snapshot_detects_prediction_and_identity_changes() -> None:
-    snapshot = {
-        "identity": {
-            key: "fixed"
-            for key in (
-                "dataset_sha256",
-                "index_sha256",
-                "model",
-                "model_revision",
-                "processor_sha256",
-                "top_k",
-                "s2_level",
-                "embedding_dim",
-            )
-        },
-        "predictions": [
-            {"predicted_lat": 58.41, "predicted_lng": 15.62, "confidence": 0.8, "top_matches": []}
-        ],
-    }
-    actual = json.loads(json.dumps(snapshot))
-    actual["predictions"][0]["processing_time_ms"] = 900
-    compare_snapshot(snapshot, actual)
-    actual["predictions"][0]["predicted_lat"] += 0.01
-    with pytest.raises(ValueError, match="pin changed"):
-        compare_snapshot(snapshot, actual)
-    actual = json.loads(json.dumps(snapshot))
-    actual["identity"]["index_sha256"] = "changed"
-    with pytest.raises(ValueError, match="identity changed"):
-        compare_snapshot(snapshot, actual)
-
-
-def test_baseline_detects_viewpoint_regression_hidden_by_overall_median() -> None:
-    identity = {
-        key: "fixed"
-        for key in ("dataset_sha256", "index_sha256", "model_revision", "processor_sha256", "top_k")
-    }
-    old_rows = [
-        {"viewpoint_type": "street", "error_m": 100, "top_k_hit": True},
-        {"viewpoint_type": "window", "error_m": 200, "top_k_hit": False},
-    ]
-    new_rows = [
-        {"viewpoint_type": "street", "error_m": 200, "top_k_hit": True},
-        {"viewpoint_type": "window", "error_m": 100, "top_k_hit": False},
-    ]
-    old = {"identity": identity, "hit_radius_m": 100, "metrics": summarize(old_rows)}
-    new = {"identity": identity, "hit_radius_m": 100, "metrics": summarize(new_rows)}
-    result = compare_baseline(old, new)
-    assert result["deltas"]["overall"]["median_error_m"] == 0
-    assert result["regressions"] == ["street"]

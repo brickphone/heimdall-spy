@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from eval.city_benchmark import prepare, score_radii
-from eval.megaloc_compare import file_hash
+from swespy.model.megaloc import file_hash
 
 
 def test_city_metrics_include_uncovered_queries_at_each_radius():

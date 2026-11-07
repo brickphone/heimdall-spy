@@ -1,6 +1,21 @@
 # Agent handoff — Linköping geolocation
 
-Updated: 2026-11-06. Read this file before resuming project work.
+Updated: 2026-11-07. Read this file before resuming project work.
+
+## Current task — densify gallery, re-rank, re-evaluate (in progress)
+
+Seven-part task (coverage + re-ranking + honest eval). Reports: `docs/experiments/`.
+
+- Rules: **never `git commit` without the user's explicit permission.** No training.
+  The 66 Commons photos are the DEV set (tuning allowed). The 25 fresh Commons photos
+  (`data/paired_views/recent_pilot_v2`, `fresh_commons_ids`) are the TEST set: run
+  exactly once at the end of Part 6; do not read, filter by or use their coordinates
+  or images before then (coordinates were read once on 2026-11-07 to check the polygon).
+- Approved area: `LINKOPING_AREA` in `swespy/swespy/config.py` (12 points, 158 km²).
+- Demo target (test set): >=40% within 500 m AND 95% CI above the majority baseline's.
+- Part 1 done: `eval/geo_eval.py`, `eval/dev_eval.py`, `eval/results/baseline_v2.json`
+  (7/66 within 500 m vs majority 15/66; re-ranking ceiling 6/66 at 100 m; 53/66
+  no_coverage). Part 2 done: CLIP/Qdrant removed; one path `swespy/model/locator.py`.
 
 ## Latest completed task — free paired-view data pilot
 

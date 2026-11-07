@@ -1,4 +1,4 @@
-"""Acquire recent Commons photos, review/freeze them, then test the saved MegaLoc index."""
+"""Acquire recent Commons photos and review/freeze them; evaluate with eval.dev_eval."""
 
 from __future__ import annotations
 
@@ -17,14 +17,12 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-import numpy as np
 from PIL import Image, ImageOps
 
+from eval.common import duplicate, signature, write_new
 from eval.expand_linkoping import BBOX, DEFAULT_ROOT
-from eval.mapillary_check import duplicate, render_map, signature, thumbnail
-from eval.megaloc_compare import MegaLocEmbedder, file_hash
-from eval.metrics import distance_m, summarize
-from eval.run_eval import write_new
+from eval.metrics import distance_m
+from swespy.model.megaloc import file_hash
 
 ROOT = Path("data/public_eval/recent_linkoping_streets_v1")
 INDEX = Path("data/benchmarks/runs/linkoping_city-20261106T130343.492589Z/gallery-index.json")
@@ -270,84 +268,14 @@ def freeze(root: Path) -> None:
     status(root, state="frozen", query_count=len(queries), photos_frozen=True)
 
 
-def evaluate(root: Path, index_manifest: Path) -> None:
-    import torch
-
-    torch.set_num_threads(1)
-    import faiss
-
-    faiss.omp_set_num_threads(1)
-    manifest = json.loads((root/"manifest.json").read_text())
-    saved = json.loads(index_manifest.read_text())
-    index_path = index_manifest.parent/"gallery.faiss"
-    if file_hash(index_path) != saved["index_sha256"]:
-        raise ValueError("Exported search index changed")
-    refs, queries = saved["references_in_index_order"], manifest["queries"]
-    gallery = json.loads((DEFAULT_ROOT/"manifest.json").read_text())
-    if file_hash(DEFAULT_ROOT/"manifest.json") != manifest["gallery_manifest_sha256"] or \
-            {(r["image_id"], r["sha256"]) for r in refs} != \
-            {(r["image_id"], r["sha256"]) for r in gallery["references"]}:
-        raise ValueError("Evaluation index differs from the gallery used for duplicate screening")
-    if not queries:
-        raise ValueError("Cannot evaluate an empty public-photo set")
-    embedder = MegaLocEmbedder(Path("data/megaloc"), "mps")
-    if any(saved["model_identity"].get(k) != v for k, v in embedder.identity.items()):
-        raise ValueError("Encoder identity differs from gallery")
-    vectors = embedder.embed([root/q["path"] for q in queries],
-                             [q["sha256"] for q in queries], batch_size=4)
-    faiss.omp_set_num_threads(1)  # The model loader sets Torch CPU threads during setup.
-    index = faiss.read_index(str(index_path))
-    if index.ntotal != len(refs) or index.d != vectors.shape[1]:
-        raise ValueError("Index shape/mapping differs")
-    distances, predictions = index.search(vectors, min(5, len(refs)))
-    rows = []
-    for i, q in enumerate(queries):
-        all_distances = [distance_m(q["lat"], q["lng"], r["lat"], r["lng"]) for r in refs]
-        top = [refs[int(j)] for j in predictions[i]]
-        errors = [all_distances[int(j)] for j in predictions[i]]
-        rows.append({**q, "viewpoint_type": "street", "error_m": errors[0],
-            "top_1_error_m": errors[0], "best_candidate_error_m": min(errors),
-            "nearest_reference_m": min(all_distances), "top_k_hit": min(errors) <= 100,
-            "candidate_count": len(top), "confidence": float(np.clip(1-distances[i, 0]/2, 0, 1)),
-            "prediction": {"predicted_lat": top[0]["lat"], "predicted_lng": top[0]["lng"],
-                "top_matches": [{"lat": r["lat"], "lng": r["lng"], "image_id": r["image_id"],
-                                 "similarity_score": float(1-d/2)}
-                                for r, d in zip(top, distances[i], strict=True)]},
-            "preview": thumbnail(root/q["path"]),
-        })
-    measures = {str(radius): {
-        "query_count": len(rows),
-        "coverage_count": sum(r["nearest_reference_m"] <= radius for r in rows),
-        "top1_hits": sum(r["error_m"] <= radius for r in rows),
-        "top5_hits": sum(r["best_candidate_error_m"] <= radius for r in rows),
-    } for radius in (25, 100, 500)}
-    report = {"model_label": "MegaLoc · recent Wikimedia Linköping photos",
-        "prediction_label": "Top-ranked reference", "metrics": summarize(rows),
-        "query_sequence_count": len({q["creator"] for q in queries}), "queries": rows,
-        "query_group_label": "photographers", "top_k": 5, "hit_radius_m": 100,
-        "context_note": "Recent Commons outdoor photos; GPS labels unverified. "
-                        "Not a random sample; similarity is uncalibrated.",
-        "attribution_note": "Commons query photos are attributed individually; "
-                            "previews resized; metadata removed. "
-                            "References are separate Mapillary photos.",
-        "radius_metrics": measures, "manifest_sha256": file_hash(root/"manifest.json"),
-        "index_sha256": saved["index_sha256"], "model_identity": embedder.identity}
-    folder = root/"runs"/datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
-    folder.mkdir(parents=True)
-    write_new(folder/"results.json", report)
-    render_map(folder/"map.html", report)
-    print(json.dumps(measures, indent=2))
-    print("PUBLIC_PHOTO_RESULTS", folder/"map.html")
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["acquire", "freeze", "evaluate"])
+    # Evaluation moved to eval.dev_eval, which uses the shared API inference path.
+    parser.add_argument("action", choices=["acquire", "freeze"])
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--since", type=date.fromisoformat, default=SINCE)
     parser.add_argument("--until", type=date.fromisoformat, default=UNTIL)
     parser.add_argument("--target", type=int, default=75)
-    parser.add_argument("--index", type=Path, default=INDEX)
     args = parser.parse_args()
     if args.since > args.until or args.until > datetime.now(UTC).date() or \
             not 1 <= args.target <= 100:
@@ -355,10 +283,8 @@ def main() -> None:
     try:
         if args.action == "acquire":
             asyncio.run(acquire(args.root, args.since, args.until, args.target))
-        elif args.action == "freeze":
-            freeze(args.root)
         else:
-            evaluate(args.root, args.index)
+            freeze(args.root)
     except httpx.HTTPStatusError as exc:
         print(f"Commons HTTP {exc.response.status_code}: acquisition incomplete; "
               "no test set frozen or evaluation performed", file=sys.stderr)

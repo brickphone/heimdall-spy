@@ -22,13 +22,11 @@ from typing import Any
 import numpy as np
 from loguru import logger
 
-from eval.mapillary_check import duplicate, record, signature
-from eval.megaloc_compare import file_hash
+from eval.common import duplicate, record, signature, write_new
 from eval.metrics import distance_m
-from eval.run_eval import index_fingerprint, write_new
 from swespy.config import get_settings
 from swespy.data.mapillary import MapillaryClient, valid_image
-from swespy.vector_store.qdrant_client import VectorStore
+from swespy.model.megaloc import file_hash
 
 BBOX = (15.618, 58.406, 15.631, 58.413)
 FIELDS = "id,sequence,captured_at,geometry,creator,compass_angle,is_pano,thumb_1024_url"
@@ -174,118 +172,111 @@ async def prepare(root: Path, gallery_cap: int, query_target: int) -> Path:
     reference_sequences = set(old["reference_sequences"])
     old_ids = {p.stem for p in Path("data/raw").glob("*.jpg")}
     old_ids |= {q["image_id"] for q in old["queries"]}
-    store = VectorStore(settings)
-    before = index_fingerprint(store)
-    try:
-        if before != old["index_sha256"]:
-            raise ValueError("Original CLIP index differs from the frozen experiment")
-        async with MapillaryClient(settings) as api:
-            items = await metadata(api, root)
-            gallery, candidates, reserved = split_metadata(
-                items, reference_sequences, old_query_sequences, gallery_cap
-            )
-            if not gallery:
-                raise ValueError("No independent gallery images available")
-            print(f"Selected {len(gallery)} gallery images; "
-                  f"reserved {len(reserved)} query sequences", flush=True)
-            originals = root / "originals"
-            originals.mkdir(exist_ok=True)
-            semaphore = asyncio.Semaphore(6)
-            completed = 0
+    # The retired CLIP index can no longer be re-fingerprinted; record its frozen hash.
+    before = old["index_sha256"]
+    async with MapillaryClient(settings) as api:
+        items = await metadata(api, root)
+        gallery, candidates, reserved = split_metadata(
+            items, reference_sequences, old_query_sequences, gallery_cap
+        )
+        if not gallery:
+            raise ValueError("No independent gallery images available")
+        print(f"Selected {len(gallery)} gallery images; "
+              f"reserved {len(reserved)} query sequences", flush=True)
+        originals = root / "originals"
+        originals.mkdir(exist_ok=True)
+        semaphore = asyncio.Semaphore(6)
+        completed = 0
 
-            async def download(item: dict[str, Any]) -> Path:
-                path = originals / f"{item['image_id']}.jpg"
-                if path.exists() and valid_image(path):
-                    return path
-                local = Path("data/raw") / path.name
-                if local.is_file() and valid_image(local):
-                    shutil.copyfile(local, path)
-                else:
-                    await api.download_image(item["thumb_url"], path)
+        async def download(item: dict[str, Any]) -> Path:
+            path = originals / f"{item['image_id']}.jpg"
+            if path.exists() and valid_image(path):
                 return path
+            local = Path("data/raw") / path.name
+            if local.is_file() and valid_image(local):
+                shutil.copyfile(local, path)
+            else:
+                await api.download_image(item["thumb_url"], path)
+            return path
 
-            async def worker(item: dict[str, Any]) -> None:
-                nonlocal completed
-                async with semaphore:
-                    await download(item)
-                    completed += 1
-                    if completed % 100 == 0 or completed == len(gallery):
-                        print(f"Gallery downloaded {completed}/{len(gallery)}", flush=True)
+        async def worker(item: dict[str, Any]) -> None:
+            nonlocal completed
+            async with semaphore:
+                await download(item)
+                completed += 1
+                if completed % 100 == 0 or completed == len(gallery):
+                    print(f"Gallery downloaded {completed}/{len(gallery)}", flush=True)
 
-            await asyncio.gather(*(worker(item) for item in gallery))
-            gallery_signatures = []
-            references = []
-            for item in gallery:
-                sig = await asyncio.to_thread(signature, originals / f"{item['image_id']}.jpg")
-                gallery_signatures.append(sig)
-                references.append({**{k: v for k, v in item.items() if k != "thumb_url"}, **sig,
-                                   "path": formatted_link(root, item, "database")})
-            queries: list[dict[str, Any]] = []
-            query_signatures: list[dict[str, Any]] = []
-            per_sequence: Counter[str] = Counter()
-            rejects: Counter[str] = Counter()
-            downloaded = 0
-            for item in candidates:
-                if len(queries) >= query_target or downloaded >= query_target * 3:
-                    break
-                if item["image_id"] in old_ids or per_sequence[item["sequence"]] >= 3:
-                    rejects["previous_image_or_sequence_cap"] += 1
-                    continue
-                if any(distance_m(item["lat"], item["lng"], q["lat"], q["lng"]) < 40
-                       for q in queries):
-                    rejects["query_spacing"] += 1
-                    continue
-                path = await download(item)
-                downloaded += 1
-                sig = await asyncio.to_thread(signature, path)
-                if duplicate(sig, gallery_signatures + query_signatures):
-                    rejects["near_duplicate"] += 1
-                    path.unlink()
-                    continue
-                queries.append({**{k: v for k, v in item.items() if k != "thumb_url"}, **sig,
-                                "path": formatted_link(root, item, "queries")})
-                query_signatures.append(sig)
-                per_sequence[item["sequence"]] += 1
-                print(f"Dense queries accepted {len(queries)}/{query_target}", flush=True)
-            if not queries:
-                raise ValueError("No separate-sequence query images passed the safeguards")
-            coords = np.array([[r["easting"], r["northing"]] for r in references])
-            nearest = [float(np.linalg.norm(coords - [q["easting"], q["northing"]], axis=1).min())
-                       for q in queries]
-            counts = Counter(int(r["heading"] // 45) if r["heading"] is not None else -1
-                             for r in references)
-            manifest = {
-                "kind": "dense_linkoping_sequence_holdout", "bbox": BBOX,
-                "metadata_sha256": file_hash(root / "metadata.json"),
-                "original_index_sha256": before, "gallery_cap": gallery_cap,
-                "requested_queries": query_target, "reference_count": len(references),
-                "query_count": len(queries), "query_sequence_count": len(per_sequence),
-                "reserved_query_sequences": sorted(reserved),
-                "protected_previous_query_sequences": sorted(old_query_sequences),
-                "selection": "10m XY cells x 45-degree heading bins; spatial round robin; seed 42",
-                "query_selection": "sequence holdout; >=40m spacing; <=3/sequence; "
-                                   "no prediction filter",
-                "duplicate_screen": "SHA256; pHash <=6 or dHash <=5 against gallery/queries",
-                "gallery_heading_bins": dict(counts), "rejections": dict(rejects),
-                "coverage": {str(radius): sum(d <= radius for d in nearest)
-                             for radius in (25, 100, 500)},
-                "references": references, "queries": queries,
-                "limitations": ["Same-provider street-only experiment; GPS not manually verified",
-                                "Capture headings may contain errors",
-                                "Pretraining overlap not audited; development experiment"],
-            }
-            if {r["sequence"] for r in references} & set(per_sequence):
-                raise RuntimeError("Reference/query sequence leakage")
-            if {r["sequence"] for r in references} & old_query_sequences:
-                raise RuntimeError("New gallery would contaminate the previous query set")
-            if index_fingerprint(store) != before:
-                raise RuntimeError("Original index changed during acquisition")
-            write_new(frozen, manifest)
-            print("DENSE_MANIFEST", frozen, flush=True)
-            print("Coverage counts:", manifest["coverage"], "of", len(queries), flush=True)
-            return frozen
-    finally:
-        store.client.close()
+        await asyncio.gather(*(worker(item) for item in gallery))
+        gallery_signatures = []
+        references = []
+        for item in gallery:
+            sig = await asyncio.to_thread(signature, originals / f"{item['image_id']}.jpg")
+            gallery_signatures.append(sig)
+            references.append({**{k: v for k, v in item.items() if k != "thumb_url"}, **sig,
+                               "path": formatted_link(root, item, "database")})
+        queries: list[dict[str, Any]] = []
+        query_signatures: list[dict[str, Any]] = []
+        per_sequence: Counter[str] = Counter()
+        rejects: Counter[str] = Counter()
+        downloaded = 0
+        for item in candidates:
+            if len(queries) >= query_target or downloaded >= query_target * 3:
+                break
+            if item["image_id"] in old_ids or per_sequence[item["sequence"]] >= 3:
+                rejects["previous_image_or_sequence_cap"] += 1
+                continue
+            if any(distance_m(item["lat"], item["lng"], q["lat"], q["lng"]) < 40
+                   for q in queries):
+                rejects["query_spacing"] += 1
+                continue
+            path = await download(item)
+            downloaded += 1
+            sig = await asyncio.to_thread(signature, path)
+            if duplicate(sig, gallery_signatures + query_signatures):
+                rejects["near_duplicate"] += 1
+                path.unlink()
+                continue
+            queries.append({**{k: v for k, v in item.items() if k != "thumb_url"}, **sig,
+                            "path": formatted_link(root, item, "queries")})
+            query_signatures.append(sig)
+            per_sequence[item["sequence"]] += 1
+            print(f"Dense queries accepted {len(queries)}/{query_target}", flush=True)
+        if not queries:
+            raise ValueError("No separate-sequence query images passed the safeguards")
+        coords = np.array([[r["easting"], r["northing"]] for r in references])
+        nearest = [float(np.linalg.norm(coords - [q["easting"], q["northing"]], axis=1).min())
+                   for q in queries]
+        counts = Counter(int(r["heading"] // 45) if r["heading"] is not None else -1
+                         for r in references)
+        manifest = {
+            "kind": "dense_linkoping_sequence_holdout", "bbox": BBOX,
+            "metadata_sha256": file_hash(root / "metadata.json"),
+            "original_index_sha256": before, "gallery_cap": gallery_cap,
+            "requested_queries": query_target, "reference_count": len(references),
+            "query_count": len(queries), "query_sequence_count": len(per_sequence),
+            "reserved_query_sequences": sorted(reserved),
+            "protected_previous_query_sequences": sorted(old_query_sequences),
+            "selection": "10m XY cells x 45-degree heading bins; spatial round robin; seed 42",
+            "query_selection": "sequence holdout; >=40m spacing; <=3/sequence; "
+                               "no prediction filter",
+            "duplicate_screen": "SHA256; pHash <=6 or dHash <=5 against gallery/queries",
+            "gallery_heading_bins": dict(counts), "rejections": dict(rejects),
+            "coverage": {str(radius): sum(d <= radius for d in nearest)
+                         for radius in (25, 100, 500)},
+            "references": references, "queries": queries,
+            "limitations": ["Same-provider street-only experiment; GPS not manually verified",
+                            "Capture headings may contain errors",
+                            "Pretraining overlap not audited; development experiment"],
+        }
+        if {r["sequence"] for r in references} & set(per_sequence):
+            raise RuntimeError("Reference/query sequence leakage")
+        if {r["sequence"] for r in references} & old_query_sequences:
+            raise RuntimeError("New gallery would contaminate the previous query set")
+        write_new(frozen, manifest)
+        print("DENSE_MANIFEST", frozen, flush=True)
+        print("Coverage counts:", manifest["coverage"], "of", len(queries), flush=True)
+        return frozen
 
 
 def main() -> None:

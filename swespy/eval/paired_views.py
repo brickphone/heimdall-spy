@@ -15,14 +15,13 @@ from typing import Any
 import httpx
 from PIL import Image, ImageOps
 
+from eval.common import duplicate, signature, thumbnail, write_new
 from eval.dense_linkoping import normalized
 from eval.expand_linkoping import BBOX, CENTRAL
-from eval.mapillary_check import duplicate, signature, thumbnail
-from eval.megaloc_compare import file_hash
 from eval.metrics import distance_m
 from eval.public_photos import ROOT as PUBLIC
 from eval.public_photos import SINCE, UA, UNTIL, candidate
-from eval.run_eval import write_new
+from swespy.model.megaloc import file_hash
 
 ROOT = Path("data/paired_views/recent_pilot_v2")
 SOURCES = Path("data/paired_views/feasibility_v1")

@@ -63,3 +63,29 @@ def test_baselines_and_distribution_flags():
     dist = geo_eval.distribution(queries)
     assert dist["photographer_count"] == 2
     assert dist["clustered"] and len(dist["flags"]) == 3
+
+
+def test_photographer_balanced_averages_per_creator():
+    result = geo_eval.photographer_balanced(["a"] * 9 + ["b"], [True] * 9 + [False])
+    assert result["rate"] == pytest.approx(0.5)
+    assert result["photographer_count"] == 2
+    assert 0 <= result["ci95"][0] <= result["ci95"][1] <= 1
+
+
+def test_target_requires_rate_and_non_overlapping_cis():
+    def within(k, n):
+        return {"within": {"500m": geo_eval.rate(k, n)}}
+
+    assert geo_eval.target_check(within(40, 60), within(10, 60))["met"]
+    overlapping = geo_eval.target_check(within(28, 66), within(15, 66))
+    assert overlapping["a_rate_at_least_40pct"] and not overlapping["b_ci_above_majority"]
+    assert not geo_eval.target_check(within(20, 66), within(0, 66))["met"]
+
+
+def test_project_area_polygon():
+    from swespy.config import in_area
+
+    assert in_area(15.6214, 58.4108)  # Linköping centre.
+    assert in_area(15.51, 58.41)  # Malmslätt.
+    assert not in_area(15.74, 58.47)  # North-east corner of the old rectangle.
+    assert not in_area(15.62, 58.30)

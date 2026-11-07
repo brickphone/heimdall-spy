@@ -6,7 +6,7 @@ by GeoSpy. The application package is currently named **SweSpy**.
 
 The working approach is visual place recognition: compare an uploaded photo with
 a collection of geotagged reference photos and return likely locations. We have a
-CLIP API, measured MegaLoc experiments, and a growing Mapillary reference gallery.
+MegaLoc-based API, measured MegaLoc experiments, and a growing Mapillary reference gallery.
 We have not established accuracy on arbitrary photos across Sweden.
 
 ## How it works
@@ -25,12 +25,11 @@ flowchart LR
     S --> C[Ranked reference locations]
 ```
 
-There are two separate implementations today:
-
-| Path | Encoder and search | Output / status |
-| --- | --- | --- |
-| Existing API | Pretrained CLIP ViT-L/14; 768-dimensional descriptors; Qdrant cosine search | Top five references and a similarity-weighted average GPS pin |
-| MegaLoc experiments | Pinned pretrained MegaLoc; 8,448-dimensional descriptors; FAISS for paper/dense evaluation, separate Qdrant collection for the earlier comparison | Ranked reference matches, reproducible metrics and maps; not integrated into the API |
+There is one inference path (`swespy/model/locator.py`), used by the API and by the
+evaluation scripts: pinned pretrained MegaLoc (8,448-dimensional descriptors) and
+exact FAISS search over references inside the approved Linköping polygon, returning
+the top-ranked reference as the pin plus the top five candidates. The earlier CLIP
+ViT-L/14 + Qdrant backend was retired on 2026-11-07 and remains only in git history.
 
 Expanding the reference gallery is **not model training**: a pretrained encoder can
 index new places without changing its weights. Reference coverage and visible scene
@@ -44,16 +43,14 @@ can give a misleading pin; geographically consistent candidates are planned.
 | --- | --- |
 | Python 3.12, uv and `uv.lock` | Application code and reproducible dependencies |
 | PyTorch, torchvision, Hugging Face Transformers / safetensors | Pretrained image models, preprocessing and weight loading |
-| CLIP | General-purpose image encoder used by the current API |
-| MegaLoc | Place/landmark retrieval encoder used in the newer experiments |
+| MegaLoc | Place/landmark retrieval encoder; the only retrieval model |
 | FastAPI, Uvicorn, Pydantic | Image-upload API, server, request/response schemas and configuration |
-| Qdrant | Persistent reference-vector database for the application |
 | FAISS, NumPy, scikit-learn | Exact benchmark search, descriptor arrays and geographic evaluation |
 | Mapillary Graph API, HTTPX, asyncio, Tenacity | Geotagged imagery acquisition, bounded concurrency and retries |
 | Pillow | Image decoding, validation and duplicate-screening inputs |
 | S2 / UTM, pandas / PyArrow | Geographic cells, local metric coordinates and ingestion metadata |
 | Leaflet, OpenStreetMap, Matplotlib | Interactive result/coverage maps and static experiment plots |
-| Docker Compose | Local API and Qdrant services |
+| Docker Compose | Local API service |
 | pytest, Ruff, mypy | Tests, lint and type checks |
 
 MegaLoc experiments run natively on the Mac's Apple GPU through PyTorch MPS;
@@ -75,8 +72,8 @@ docker compose up --build
 ```
 
 API documentation: <http://localhost:8000/docs>. Health: <http://localhost:8000/health>.
-Initial startup may download CLIP weights. Starting services does not download
-reference photos, populate a new Qdrant collection or train a model.
+Startup loads MegaLoc and the exported gallery index from `swespy/data/`. Starting
+services does not download reference photos or train a model.
 
 With a populated compatible reference collection, upload a JPEG or PNG:
 
@@ -121,7 +118,7 @@ Keep credentials in ignored `swespy/.env`; use `.env.example` as the template.
 
 
 Downloads, virtual environments, model weights, descriptor caches, generated maps
-and local Qdrant storage are ignored by Git. A clone alone does not restore them;
+and gallery indexes are ignored by Git. A clone alone does not restore them;
 back up required artifacts separately. Gallery manifests retain source attribution
 and licensing links. Existing evaluation capture sequences stay out of the expanded
 gallery; duplicate screening provides additional protection.
@@ -131,8 +128,8 @@ gallery; duplicate screening provides additional protection.
 Improve photographic reference/training coverage for pedestrian views and
 landmarks, then add a fresh spatially balanced, creator-separated holdout. The
 first geographic-head experiment is complete and did not beat a constant-area
-prior. Existing API inference remains CLIP; MegaLoc and the trained head can be
-searched explicitly through the CLI. PIGEOTTO-style training and cross-view
+prior. The API now uses MegaLoc retrieval; the trained head can be searched
+explicitly through the CLI. PIGEOTTO-style training and cross-view
 retrieval fine-tuning remain research directions.
 
 ## Research

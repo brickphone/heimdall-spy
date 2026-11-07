@@ -14,9 +14,9 @@ from typing import Any
 
 import numpy as np
 
-from eval.megaloc_compare import DIM, checked_vectors, file_hash
+from eval.common import write_new
 from eval.paper_benchmark import RECALLS, UPSTREAM, dataset_identity, recall_metrics
-from eval.run_eval import write_new
+from swespy.model.megaloc import DIM, checked_vectors, file_hash
 
 
 def main() -> None:

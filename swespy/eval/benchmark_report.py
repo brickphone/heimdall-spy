@@ -11,11 +11,10 @@ from typing import Any
 
 import numpy as np
 
-from eval.mapillary_check import render_map, thumbnail
-from eval.megaloc_compare import file_hash
+from eval.common import render_map, thumbnail, write_new
 from eval.metrics import summarize
 from eval.paper_benchmark import recall_metrics
-from eval.run_eval import write_new
+from swespy.model.megaloc import file_hash
 
 
 def xy(paths: list[Path]) -> np.ndarray:

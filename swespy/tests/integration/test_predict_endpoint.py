@@ -1,7 +1,6 @@
 import io
 import os
 
-import pytest
 from httpx import ASGITransport, AsyncClient
 from PIL import Image
 
@@ -13,8 +12,7 @@ def _make_test_png() -> bytes:
     return buf.getvalue()
 
 
-@pytest.mark.parametrize("score", [0.9, 1.0000001])
-async def test_predict_endpoint_schema(monkeypatch, score: float) -> None:
+async def test_predict_endpoint_schema() -> None:
     os.environ["TESTING"] = "true"
 
     from swespy.api.main import create_app
@@ -23,14 +21,6 @@ async def test_predict_endpoint_schema(monkeypatch, score: float) -> None:
     get_settings.cache_clear()
 
     app = create_app()
-    query = app.state.vector_store.query
-    monkeypatch.setattr(
-        app.state.vector_store,
-        "query",
-        lambda embedding, top_k: [
-            dict(result, similarity_score=score) for result in query(embedding, top_k)
-        ],
-    )
     transport = ASGITransport(app=app)
     image_bytes = _make_test_png()
 
@@ -43,12 +33,13 @@ async def test_predict_endpoint_schema(monkeypatch, score: float) -> None:
     assert set(data.keys()) == {
         "predicted_lat",
         "predicted_lng",
+        "prediction_method",
         "confidence",
+        "confidence_status",
         "top_matches",
         "processing_time_ms",
     }
-    assert isinstance(data["top_matches"], list)
-    assert len(data["top_matches"]) > 0
+    assert len(data["top_matches"]) == 5
     first = data["top_matches"][0]
-    assert first["similarity_score"] == min(score, 1.0)
-    assert {"lat", "lng", "similarity_score", "s2_cell"}.issubset(first.keys())
+    assert first["rank"] == 1
+    assert {"image_id", "lat", "lng", "similarity_score", "source_url"} <= first.keys()

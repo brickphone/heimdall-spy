@@ -78,7 +78,7 @@ Then freeze the reviewed set and evaluate:
 ```bash
 .venv-benchmark/bin/python -m eval.public_photos freeze
 PYTORCH_ENABLE_MPS_FALLBACK=1 HF_HUB_OFFLINE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
-  .venv-benchmark/bin/python -u -m eval.public_photos evaluate
+  .venv-benchmark/bin/python -u -m eval.public_photos evaluate  # removed 2026-11-07; use eval.dev_eval
 ```
 
 Freeze validates capture dates and hashes and refuses empty/unknown/repeated IDs.

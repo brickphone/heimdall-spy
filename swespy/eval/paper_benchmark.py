@@ -24,8 +24,8 @@ from typing import Any
 import numpy as np
 import torch
 
-from eval.megaloc_compare import DIM, MegaLocEmbedder, checked_vectors, file_hash
-from eval.run_eval import write_new
+from eval.common import write_new
+from swespy.model.megaloc import DIM, MegaLocEmbedder, checked_vectors, file_hash
 
 UPSTREAM_REVISION = "9c8dfd496b49a49549323b94a6af204cbee91604"
 UPSTREAM = Path("data/benchmarks/upstream") / UPSTREAM_REVISION

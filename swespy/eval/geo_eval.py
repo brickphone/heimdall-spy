@@ -18,6 +18,8 @@ TOP_KS = (1, 5, 20, 50)
 DIAGNOSTIC_RADII_M = (100, 500)
 COVERAGE_RADIUS_M = 100
 RETRIEVAL_DEPTH = 50
+TARGET_RADIUS_M = 500
+TARGET_RATE = 0.40
 # Flag a development set as clustered when one photographer or one 1 km disc holds
 # more than this share of the photos.
 CLUSTER_SHARE_THRESHOLD = 0.25
@@ -100,6 +102,9 @@ def diagnose(
             f"{r}m": {str(k): any(d <= r for d in ranked[:k]) for k in TOP_KS}
             for r in DIAGNOSTIC_RADII_M
         },
+        # Geometric re-ranking can only recover references showing the same scene, so
+        # the 100 m top-50 figure (not 500 m) is the re-ranking ceiling.
+        "true_in_top50_at_100m": any(d <= 100 for d in ranked[:50]),
         "failure_type": failure_type(nearest_reference_m, ranked),
     }
 
@@ -124,7 +129,38 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         },
         "failure_type": {t: rate(types.get(t, 0), n)
                          for t in ("success", "ranking", "retrieval", "no_coverage")},
+        "reranking_ceiling_top50_at_100m": rate(sum(r["true_in_top50_at_100m"] for r in rows), n),
     }
+
+
+def photographer_balanced(
+    creators: list[str], hits: list[bool], seed: int = 0, resamples: int = 10_000
+) -> dict[str, Any]:
+    """Mean of per-photographer hit rates, with a photographer-level bootstrap 95% CI."""
+    if len(creators) != len(hits) or not hits:
+        raise ValueError("Need one hit flag per photo")
+    groups: dict[str, list[bool]] = {}
+    for creator, hit in zip(creators, hits, strict=True):
+        groups.setdefault(creator, []).append(hit)
+    rates = np.array([statistics.fmean(v) for v in groups.values()])
+    rng = np.random.default_rng(seed)
+    draws = rng.choice(rates, size=(resamples, len(rates)), replace=True).mean(axis=1)
+    return {"rate": float(rates.mean()), "photographer_count": len(rates),
+            "ci95": [float(np.quantile(draws, 0.025)), float(np.quantile(draws, 0.975))],
+            "ci_method": f"photographer bootstrap, {resamples} resamples, seed {seed}"}
+
+
+def target_check(system: dict[str, Any], majority: dict[str, Any]) -> dict[str, Any]:
+    """Demo target: >= 40% within 500 m AND 95% CI entirely above the majority baseline's."""
+    key = f"{TARGET_RADIUS_M}m"
+    s, m = system["within"][key], majority["within"][key]
+    reaches_rate = s["rate"] >= TARGET_RATE
+    beats_baseline = s["ci95"][0] > m["ci95"][1]
+    return {"criterion": f">= {TARGET_RATE:.0%} within {TARGET_RADIUS_M} m AND system 95% CI "
+                         "does not overlap and lies above the majority-location baseline CI",
+            "system_within_500m": s, "majority_within_500m": m,
+            "a_rate_at_least_40pct": reaches_rate, "b_ci_above_majority": beats_baseline,
+            "met": reaches_rate and beats_baseline}
 
 
 def majority_location(refs: list[dict[str, Any]], cell_m: int = 1000) -> dict[str, Any]:
@@ -138,9 +174,13 @@ def majority_location(refs: list[dict[str, Any]], cell_m: int = 1000) -> dict[st
             "cell": list(key), "cell_m": cell_m, "reference_count": len(members)}
 
 
+def constant_errors(queries: list[dict[str, Any]], lat: float, lng: float) -> list[float]:
+    return [float(haversine_m(q["lat"], q["lng"], np.array([lat]), np.array([lng]))[0])
+            for q in queries]
+
+
 def constant_baseline(queries: list[dict[str, Any]], lat: float, lng: float) -> dict[str, Any]:
-    errors = [float(haversine_m(q["lat"], q["lng"], np.array([lat]), np.array([lng]))[0])
-              for q in queries]
+    errors = constant_errors(queries, lat, lng)
     n = len(errors)
     return {"median_error_m": statistics.median(errors),
             "within": {f"{radius}m": rate(sum(e <= radius for e in errors), n)

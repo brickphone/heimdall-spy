@@ -1,0 +1,99 @@
+"""The shared inference path: polygon-restricted gallery search and ranked output."""
+
+import json
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+from swespy.model import locator as loc
+from swespy.model.megaloc import MODEL_IDENTITY_KEYS, file_hash
+
+IDENTITY = {key: "pinned" for key in MODEL_IDENTITY_KEYS}
+
+
+def gallery_files(tmp_path: Path) -> Path:
+    import faiss
+
+    refs = [
+        {"image_id": "centre", "lat": 58.4108, "lng": 15.6214},
+        {"image_id": "ryd", "lat": 58.4080, "lng": 15.5650},
+        {"image_id": "outside", "lat": 58.30, "lng": 15.62},  # South of the polygon.
+    ]
+    vectors = np.eye(3, 4, dtype=np.float32)
+    index = faiss.IndexFlatL2(4)
+    index.add(vectors)
+    faiss.write_index(index, str(tmp_path / "gallery.faiss"))
+    manifest = tmp_path / "gallery-index.json"
+    manifest.write_text(json.dumps({
+        "index_sha256": file_hash(tmp_path / "gallery.faiss"), "dimension": 4,
+        "references_in_index_order": refs, "model_identity": {**IDENTITY, "device": "mps"},
+    }))
+    return manifest
+
+
+class FakeEmbedder:
+    identity = {**IDENTITY, "device": "cpu"}  # Device may differ; descriptor space may not.
+
+    def embed_bytes(self, contents: bytes) -> np.ndarray:
+        return np.array([0, 1, 0, 0], dtype=np.float32)
+
+
+def test_gallery_excludes_references_outside_project_area(tmp_path: Path) -> None:
+    gallery = loc.Gallery(gallery_files(tmp_path))
+    assert [r["image_id"] for r in gallery.refs] == ["centre", "ryd"]
+    assert gallery.excluded_outside_area == 1
+    # The excluded reference's vector would be the perfect match; it must not come back.
+    indices, sims = gallery.search(np.array([0, 0, 1, 0], dtype=np.float32), 5)
+    assert indices.shape == (1, 2)
+
+
+def test_locator_ranks_and_reports_top_candidates(tmp_path: Path) -> None:
+    locator = loc.GeoLocator(FakeEmbedder(), loc.Gallery(gallery_files(tmp_path)), top_k=2)
+    result = locator.locate_bytes(b"in-memory upload")
+    assert (result["predicted_lat"], result["predicted_lng"]) == (58.4080, 15.5650)
+    assert [c["image_id"] for c in result["candidates"]] == ["ryd", "centre"]
+    assert result["candidates"][0]["similarity"] == pytest.approx(1.0)
+    assert result["candidates"][1]["similarity"] == pytest.approx(0.0)
+    assert result["ranked_indices"] == [1, 0]
+
+
+def test_locator_rejects_a_different_descriptor_space(tmp_path: Path) -> None:
+    embedder = FakeEmbedder()
+    embedder.identity = {**IDENTITY, "weights_sha256": "other"}
+    with pytest.raises(ValueError, match="different MegaLoc assets"):
+        loc.GeoLocator(embedder, loc.Gallery(gallery_files(tmp_path)))
+
+
+def test_changed_index_is_rejected(tmp_path: Path) -> None:
+    manifest = gallery_files(tmp_path)
+    (tmp_path / "gallery.faiss").write_bytes(b"tampered")
+    with pytest.raises(ValueError, match="checksum"):
+        loc.Gallery(manifest)
+
+
+def test_descriptor_cache_gallery_format(tmp_path: Path) -> None:
+    import hashlib
+
+    folder = tmp_path / "descriptors"
+    folder.mkdir()
+    refs = []
+    for i, (lat, lng) in enumerate([(58.4108, 15.6214), (58.4080, 15.5650), (58.30, 15.62)]):
+        vector = np.zeros(4, dtype=np.float32)
+        vector[i] = 1
+        np.save(folder / f"h{i}.npy", vector)
+        refs.append({"image_id": f"r{i}", "lat": lat, "lng": lng, "sha256": f"h{i}"})
+    manifest = tmp_path / "gallery-index.json"
+    manifest.write_text(json.dumps({
+        "format": "descriptor_cache_v1", "dimension": 4, "descriptor_dir": str(folder),
+        "references_in_index_order": refs, "model_identity": IDENTITY,
+        "index_sha256": hashlib.sha256("\n".join(r["sha256"] for r in refs).encode()).hexdigest(),
+    }))
+    gallery = loc.Gallery(manifest)
+    assert [r["image_id"] for r in gallery.refs] == ["r0", "r1"]
+    indices, sims = gallery.search(np.array([0, 1, 0, 0], dtype=np.float32), 2)
+    assert indices[0].tolist() == [1, 0] and sims[0][0] == pytest.approx(1.0)
+    refs[0]["sha256"] = "tampered"
+    manifest.write_text(manifest.read_text().replace('"h0"', '"tampered"'))
+    with pytest.raises(ValueError, match="checksum"):
+        loc.Gallery(manifest)

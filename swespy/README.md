@@ -1,58 +1,38 @@
 # SweSpy
 
-SweSpy is an experimental image-geolocation API. Its current pretrained CLIP
-retrieval pipeline is being audited and measured for Linköping. Separate CLIP and
-MegaLoc retrieval experiments have measured results; accuracy on independent
-ordinary user photos and calibrated confidence remain unestablished. See the
-[repository overview](../README.md) for architecture, technologies and current status.
+SweSpy is an experimental image-geolocation API for Linköping. It encodes an
+uploaded photo with pretrained MegaLoc and searches a polygon-restricted gallery of
+geotagged references (exact FAISS search). The API and the evaluation scripts share
+one inference path, `swespy/model/locator.py`. The former CLIP/Qdrant backend was
+retired on 2026-11-07 and survives only in git history. Accuracy on ordinary photos
+is low and confidence is uncalibrated; see `eval/results/baseline_v2.json` and the
+[repository overview](../README.md).
 
 ## Quickstart
 
-From this `swespy/` directory, with Docker Engine and Docker Compose 2.24+
-installed, one command builds the locked Python environment and starts Qdrant
-and the API:
+From this `swespy/` directory, with Docker Engine and Docker Compose 2.24+:
 
 ```bash
 docker compose up --build
 ```
 
-The container uses Python 3.12.8, uv 0.9.5, the committed `uv.lock`, and Qdrant
-1.12.5. The API waits for Qdrant readiness and connects to its service hostname.
-Ports are bound to localhost. A `.env` is optional; see `.env.example` for local
-Python configuration. No Mapillary token or ingestion is required to start.
-The first API startup may download the configured pretrained CLIP weights into
-`data/huggingface/`; CPU inference is the reproducible container default.
-
-**Starting services does not populate reference data.** With a fresh collection,
-current inference has the empty-result behavior documented in the audit. Real
-geolocation requires the existing reference index. Do not create a synthetic
-index and call it the baseline. No dataset download/training runs at startup.
+The container uses Python 3.12.8, uv 0.9.5 and the committed `uv.lock`, and runs
+MegaLoc on CPU. It reads the MegaLoc weights and the exported gallery index from the
+mounted `data/` directory (`GALLERY_INDEX`, `MEGALOC_ROOT`); neither is in git, and
+startup fails clearly if the index is missing. Uploads are processed in memory and
+never stored. Ports are bound to localhost.
 
 For local development, install Python 3.12 and uv 0.9.5, then:
 
 ```bash
 uv sync --frozen --extra dev
-docker compose up -d qdrant
-```
-
-Copy `.env.example` to `.env` and run:
-
-```bash
-uv run --frozen uvicorn swespy.api.main:app --reload
+PYTORCH_ENABLE_MPS_FALLBACK=1 MEGALOC_DEVICE=mps uv run --frozen uvicorn swespy.api.main:app
 ```
 
 ## Scripts
 
-These scripts require reference data or external credentials. After the historical
-Mac dataset was lost, ingestion prerequisites were repaired for a capped
-central-Linköping rebuild; see [the rebuild record](../docs/REBUILD.md). Configure
-the Mapillary token privately in `.env`. Ingestion is separate from startup and
-never supplies evaluation photos. Model, S2 level and Qdrant schema are unchanged.
-Indexing refuses to overwrite a populated collection. Training remains deferred.
-
-- `python scripts/download_data.py`
-- `python scripts/train.py`
-- `python scripts/index_vectors.py`
+`python scripts/download_data.py` runs the original Mapillary ingestion. Reference
+acquisition for the MegaLoc gallery lives in `eval/` (see `eval/README.md`).
 
 ## Evaluation and checks
 

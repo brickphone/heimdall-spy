@@ -17,12 +17,11 @@ from typing import Any
 import httpx
 from loguru import logger
 
+from eval.common import duplicate, signature, write_new
 from eval.dense_linkoping import FIELDS, OLD_MANIFEST, formatted_link, normalized
-from eval.mapillary_check import duplicate, signature
-from eval.megaloc_compare import file_hash
-from eval.run_eval import write_new
 from swespy.config import get_settings
 from swespy.data.mapillary import MapillaryClient, valid_image
+from swespy.model.megaloc import file_hash
 
 BBOX = (15.50, 58.34, 15.75, 58.48)
 GRID = (10, 8)

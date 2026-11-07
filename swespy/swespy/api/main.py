@@ -2,65 +2,62 @@
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 import sys
+from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
 from loguru import logger
-from slowapi import Limiter
+from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from slowapi import _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 
 from swespy.api.middleware import request_id_middleware
 from swespy.api.routes.health import router as health_router
 from swespy.api.routes.predict import router as predict_router
-from swespy.config import get_settings
-from swespy.model.embedder import CLIPEmbedder
-from swespy.vector_store.qdrant_client import VectorStore
+from swespy.config import Settings, get_settings
 
 
-class DummyEmbedder:
-    """Fast lightweight embedder for tests."""
+class DummyLocator:
+    """Fast lightweight locator for tests; never loads model weights or an index."""
 
-    def embed_bytes(self, _: bytes) -> Any:
-        import numpy as np
+    def locate_bytes(self, contents: bytes) -> dict[str, Any]:
+        _ = contents
+        return {
+            "predicted_lat": 58.4108, "predicted_lng": 15.6214,
+            "prediction_method": "top-ranked reference", "confidence": 0.9,
+            "confidence_status": "dummy",
+            "candidates": [
+                {"rank": i, "image_id": str(i), "lat": 58.4108, "lng": 15.6214,
+                 "similarity": 0.9, "creator": None, "source_url": None, "license_url": None}
+                for i in range(1, 6)
+            ],
+        }
 
-        vec = np.zeros(768, dtype=np.float32)
-        vec[0] = 1.0
-        return vec
 
+def build_locator(settings: Settings) -> Any:
+    """Load MegaLoc and the polygon-restricted gallery: the one inference path."""
+    from swespy.model.locator import Gallery, GeoLocator
+    from swespy.model.megaloc import MegaLocEmbedder
 
-class DummyVectorStore:
-    """Fast lightweight vector store for tests."""
-
-    def query(self, embedding: Any, top_k: int) -> list[dict[str, Any]]:
-        _ = embedding
-        return [
-            {"lat": 59.3293, "lng": 18.0686, "similarity_score": 0.9, "s2_cell": "89c25", "image_id": "1"}
-            for _ in range(top_k)
-        ]
-
-    def aggregate_prediction(self, results: list[dict[str, Any]]) -> dict[str, float]:
-        _ = results
-        return {"lat": 59.3293, "lng": 18.0686, "confidence": 0.9}
+    gallery = Gallery(Path(settings.gallery_index), settings.area_polygon)
+    embedder = MegaLocEmbedder(Path(settings.megaloc_root), settings.megaloc_device)
+    return GeoLocator(embedder, gallery, settings.top_k_results, settings.retrieval_depth)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load model and vector store at app startup."""
+    """Load model and gallery at app startup."""
     settings = get_settings()
     if settings.testing:
-        app.state.embedder = DummyEmbedder()
-        app.state.vector_store = DummyVectorStore()
-        logger.info("Running in testing mode with dummy components")
-    else:
-        app.state.embedder = CLIPEmbedder(settings)
-        app.state.vector_store = VectorStore(settings)
-        app.state.vector_store.create_collection()
-        logger.info("Loaded embedder and vector store")
+        app.state.locator = DummyLocator()
+        logger.info("Running in testing mode with a dummy locator")
+    elif not hasattr(app.state, "locator"):
+        app.state.locator = build_locator(settings)
+        logger.info("Loaded MegaLoc and {} gallery references",
+                    len(app.state.locator.gallery.refs))
 
     app.state.top_k_results = settings.top_k_results
     app.state.allowed_image_types = set(settings.allowed_image_types)
@@ -82,8 +79,7 @@ def create_app() -> FastAPI:
     app.state.allowed_image_types = set(settings.allowed_image_types)
     app.state.max_upload_size_mb = settings.max_upload_size_mb
     if settings.testing:
-        app.state.embedder = DummyEmbedder()
-        app.state.vector_store = DummyVectorStore()
+        app.state.locator = DummyLocator()
 
     app.add_middleware(SlowAPIMiddleware)
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

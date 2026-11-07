@@ -6,12 +6,16 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class MatchResult(BaseModel):
-    """A single vector match candidate."""
+    """One ranked gallery reference."""
 
+    rank: int = Field(ge=1)
+    image_id: str
     lat: float
     lng: float
-    similarity_score: float = Field(ge=0.0, le=1.0)
-    s2_cell: str
+    similarity_score: float = Field(ge=-1.0, le=1.0)
+    creator: str | None = None
+    source_url: str | None = None
+    license_url: str | None = None
 
     @field_validator("similarity_score", mode="before")
     @classmethod
@@ -27,6 +31,8 @@ class PredictResponse(BaseModel):
 
     predicted_lat: float
     predicted_lng: float
+    prediction_method: str
     confidence: float = Field(ge=0.0, le=1.0)
+    confidence_status: str
     top_matches: list[MatchResult]
     processing_time_ms: float

@@ -11,11 +11,11 @@ from typing import Any
 import numpy as np
 import torch
 
-from eval.megaloc_compare import checked_vectors, file_hash
+from eval.common import write_new
 from eval.metrics import distance_m
 from eval.public_photos import INDEX, ROOT
-from eval.run_eval import write_new
 from swespy.model.geo_head import GeoHead, fit_head, grid_label, sequence_split
+from swespy.model.megaloc import checked_vectors, file_hash
 
 OUT = Path("data/classifier/linkoping_linear_v1")
 PUBLIC_REPORT = ROOT / "runs/20261106T135549400456Z/results.json"

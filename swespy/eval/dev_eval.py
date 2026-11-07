@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -11,51 +12,66 @@ from typing import Any
 import numpy as np
 
 from eval import geo_eval
-from eval.megaloc_compare import MegaLocEmbedder, file_hash
-from eval.public_photos import INDEX, ROOT
+from eval.public_photos import ROOT
+from swespy.config import LINKOPING_AREA, get_settings
+from swespy.model.locator import Gallery, GeoLocator
+from swespy.model.megaloc import MegaLocEmbedder, file_hash
 
 DEPTH = geo_eval.RETRIEVAL_DEPTH
 
 
-def load_index(index_manifest: Path) -> tuple[Any, list[dict[str, Any]], dict[str, Any]]:
-    import torch
-
-    torch.set_num_threads(1)
-    import faiss
-
-    saved = json.loads(index_manifest.read_text())
-    path = index_manifest.parent / "gallery.faiss"
-    if file_hash(path) != saved["index_sha256"]:
-        raise ValueError("Exported search index changed")
-    index = faiss.read_index(str(path))
-    refs = saved["references_in_index_order"]
-    if index.ntotal != len(refs):
-        raise ValueError("Index and reference mapping differ")
-    return index, refs, saved
+def robustness(queries: list[dict[str, Any]], rows: list[dict[str, Any]],
+               majority: dict[str, Any]) -> dict[str, Any]:
+    """Photographer-balanced accuracy and results without the three largest photographers."""
+    radius = geo_eval.TARGET_RADIUS_M
+    creators = [q["creator"] for q in queries]
+    base_errors = geo_eval.constant_errors(queries, majority["lat"], majority["lng"])
+    top3 = [c for c, _ in Counter(creators).most_common(3)]
+    kept = [i for i, c in enumerate(creators) if c not in top3]
+    sub = [rows[i] for i in kept]
+    return {
+        f"photographer_balanced_within_{radius}m": {
+            "system": geo_eval.photographer_balanced(
+                creators, [r["error_m"] <= radius for r in rows]),
+            "majority_location": geo_eval.photographer_balanced(
+                creators, [e <= radius for e in base_errors]),
+        },
+        "excluding_top3_photographers": {
+            "excluded_photographers": top3,
+            "query_count": len(sub),
+            "system_within": {f"{r}m": geo_eval.rate(sum(x["error_m"] <= r for x in sub), len(sub))
+                              for r in geo_eval.RADII_M},
+            "majority_within": {
+                f"{r}m": geo_eval.rate(sum(base_errors[i] <= r for i in kept), len(sub))
+                for r in geo_eval.RADII_M},
+            "failure_type": {t: sum(x["failure_type"] == t for x in sub)
+                             for t in ("success", "ranking", "retrieval", "no_coverage")},
+        },
+        "note": "Diagnostics only; the development set itself is not reweighted or filtered",
+    }
 
 
 def evaluate_rows(
     queries: list[dict[str, Any]],
     refs: list[dict[str, Any]],
-    ranked: list[list[int]],
-    similarities: list[list[float]],
+    results: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Score top-1 retrieval for each query; ``ranked`` holds reference indices."""
+    """Score ``GeoLocator`` outputs; ranked indices refer to ``refs``."""
     lats = np.array([r["lat"] for r in refs])
     lngs = np.array([r["lng"] for r in refs])
     rows = []
-    for q, order, sims in zip(queries, ranked, similarities, strict=True):
+    for q, result in zip(queries, results, strict=True):
         nearest = float(geo_eval.haversine_m(q["lat"], q["lng"], lats, lngs).min())
-        coords = [(refs[i]["lat"], refs[i]["lng"]) for i in order]
-        row = geo_eval.diagnose(q["lat"], q["lng"], coords[0], coords, nearest)
+        coords = [(refs[i]["lat"], refs[i]["lng"]) for i in result["ranked_indices"]]
+        predicted = (result["predicted_lat"], result["predicted_lng"])
+        row = geo_eval.diagnose(q["lat"], q["lng"], predicted, coords, nearest)
         rows.append({
             "image_id": q["image_id"], "creator": q["creator"],
             "capture_date": q["capture_date"], "lat": q["lat"], "lng": q["lng"],
             **row,
-            "top1_similarity": sims[0],
-            "top5": [{"image_id": refs[i]["image_id"], "lat": refs[i]["lat"],
-                      "lng": refs[i]["lng"], "similarity": s}
-                     for i, s in zip(order[:5], sims[:5], strict=True)],
+            "confidence": result["confidence"],
+            "top5": [{k: c[k] for k in ("image_id", "lat", "lng", "similarity")}
+                     for c in result["candidates"][:5]],
         })
     return rows
 
@@ -68,6 +84,9 @@ def report(
     provenance: dict[str, Any],
 ) -> dict[str, Any]:
     majority = geo_eval.majority_location(refs)
+    metrics = geo_eval.summarize(rows)
+    baseline = {**geo_eval.constant_baseline(queries, majority["lat"], majority["lng"]),
+                "location": majority}
     return {
         "label": label,
         "created_at": datetime.now(UTC).isoformat(),
@@ -81,14 +100,17 @@ def report(
             "majority_location": "Mean position of the most populated 1 km UTM gallery cell "
                                  "(no evaluation labels used)",
             "random_reference": "Exact expectation of predicting a uniformly random reference",
+            "reranking_ceiling": "Share with a reference within 100 m in the top 50; geometric "
+                                 "verification cannot recover matches beyond the same scene",
         },
         "reference_count": len(refs),
-        "metrics": geo_eval.summarize(rows),
+        "metrics": metrics,
+        "target": geo_eval.target_check(metrics, baseline),
         "baselines": {
-            "majority_location": {**geo_eval.constant_baseline(
-                queries, majority["lat"], majority["lng"]), "location": majority},
+            "majority_location": baseline,
             "random_reference": geo_eval.random_reference_baseline(queries, refs),
         },
+        "robustness": robustness(queries, rows, majority),
         "dev_set_distribution": geo_eval.distribution(queries),
         "provenance": provenance,
         "queries": rows,
@@ -98,27 +120,29 @@ def report(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dev-root", type=Path, default=ROOT)
-    parser.add_argument("--index", type=Path, default=INDEX)
+    parser.add_argument("--index", type=Path, default=Path(get_settings().gallery_index))
     parser.add_argument("--device", choices=["mps", "cpu", "cuda"], default="mps")
     parser.add_argument("--label", default="baseline_v2")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     manifest_path = args.dev_root / "manifest.json"
     queries = json.loads(manifest_path.read_text())["queries"]
-    index, refs, saved = load_index(args.index)
-    embedder = MegaLocEmbedder(Path("data/megaloc"), args.device)
-    if any(saved["model_identity"].get(k) != v for k, v in embedder.identity.items()):
-        raise ValueError("Encoder identity differs from the indexed gallery")
+    gallery = Gallery(args.index)
+    embedder = MegaLocEmbedder(Path(get_settings().megaloc_root), args.device)
+    locator = GeoLocator(embedder, gallery, top_k=5, depth=DEPTH)
+    # Same pixels as an upload; the hash-keyed cache only avoids re-encoding.
     vectors = embedder.embed([args.dev_root / q["path"] for q in queries],
                              [q["sha256"] for q in queries], batch_size=4)
-    import faiss
-
-    faiss.omp_set_num_threads(1)
-    distances, indices = index.search(vectors, min(DEPTH, len(refs)))
-    rows = evaluate_rows(queries, refs, indices.tolist(), (1 - distances / 2).tolist())
+    results = [locator.locate_vector(v) for v in vectors]
+    refs, excluded = gallery.refs, gallery.excluded_outside_area
+    rows = evaluate_rows(queries, refs, results)
     result = report(queries, refs, rows, args.label, {
         "dev_manifest_sha256": file_hash(manifest_path),
-        "index_sha256": saved["index_sha256"],
+        "index_sha256": gallery.index_sha256,
+        "gallery_filter": {"polygon_lnglat": [list(v) for v in LINKOPING_AREA],
+                           "references_in_saved_index": len(refs) + excluded,
+                           "excluded_outside_polygon": excluded,
+                           "references_used": len(refs)},
         "model_identity": embedder.identity,
     })
     args.out.parent.mkdir(parents=True, exist_ok=True)
@@ -127,6 +151,9 @@ def main() -> None:
     for radius, value in m["within"].items():
         print(f"within {radius}: {value['count']}/{value['n']} "
               f"[{value['ci95'][0]:.3f}, {value['ci95'][1]:.3f}]")
+    print("target:", {k: result["target"][k] for k in
+                      ("a_rate_at_least_40pct", "b_ci_above_majority", "met")})
+    print("excluded outside polygon:", excluded)
     print("failure types:", {k: v["count"] for k, v in m["failure_type"].items()})
     print("wrote", args.out)
 
