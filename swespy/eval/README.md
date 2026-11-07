@@ -1,5 +1,33 @@
 # Private retrieval evaluation
 
+> **Current entry point (2026-11-07):** `python -m eval.dev_eval --out <file>` evaluates
+> the 66-photo development set through the same `GeoLocator` path the API uses, with
+> Wilson CIs, failure types, baselines and photographer-robustness checks. See
+> `docs/experiments/`. The CLIP/Qdrant backend and the scripts that depended on it
+> (`run_eval.py`, `mapillary_check.py`, `megaloc_compare.py`, `public_photos evaluate`)
+> were removed; the sections below that use them are historical and their code is in
+> git history before the retirement change. Shared helpers moved to `eval/common.py`
+> and the MegaLoc encoder to `swespy/model/megaloc.py`.
+
+## Reference gallery v2 (Part 4)
+
+Requirements: `docs/GALLERY_V2_SPEC.md`; licences: `docs/LICENSES.md`.
+
+```bash
+# Metadata (no images): Mapillary tiles + Graph API, Commons, KartaView
+.venv-benchmark/bin/python -u -m eval.densify mapillary-meta
+.venv-benchmark/bin/python -u -m eval.densify commons-meta
+.venv-benchmark/bin/python -u -m eval.densify kartaview-meta
+# Overnight, resumable: plan -> download -> crops -> filter -> encode -> index -> coverage
+caffeinate -i scripts/build_gallery_v2.sh 2>&1 | tee -a data/gallery_v2/build.log
+# Evaluate the dev set on gallery v2
+PYTORCH_ENABLE_MPS_FALLBACK=1 .venv-benchmark/bin/python -m eval.dev_eval \
+  --index data/gallery_v2/gallery-index.json --label gallery_v2 --out <file>
+```
+
+Self-collected walks: see the docstring of `eval/walks.py` for the expected input
+(videos + `track.gpx`), the GPS rules, EgoBlur blurring and the approval step.
+
 Part 2 preparation is implemented; the real baseline and snapshot capture are
 pending user-owned photos, camera-location labels and a populated reference index.
 Synthetic unit fixtures are never used as baseline evidence.

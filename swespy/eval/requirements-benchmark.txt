@@ -18,3 +18,4 @@ six==1.17.0
 threadpoolctl==3.8.0
 tzdata==2026.5
 utm==0.8.1
+mapbox-vector-tile==2.1.0

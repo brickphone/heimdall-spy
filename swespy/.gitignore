@@ -13,6 +13,7 @@ eval/photos/*
 eval/labels.csv
 eval/results/*.json
 !eval/results/baseline.json
+!eval/results/baseline_v2.json
 eval/snapshots/*.json
 .mypy_cache/
 .uv-cache/
@@ -28,3 +29,4 @@ data/public_eval/
 data/failure_audit/
 data/classifier/
 data/paired_views/
+data/gallery_v2/
