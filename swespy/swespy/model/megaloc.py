@@ -28,19 +28,29 @@ WEIGHTS_REVISION = "a0f34722c4297ff787e022433799250180860af7"
 DIM = 8448
 
 PREPROCESSING = {
-    "rgb": True, "to_tensor": True,
-    "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225],
-    "resize_after_normalization": [322, 322], "antialias": True,
-    "resize_interpolation": "bilinear", "dtype": "float32",
-    "augmentation": "none", "whitening_or_pca": "none",
+    "rgb": True,
+    "to_tensor": True,
+    "mean": [0.485, 0.456, 0.406],
+    "std": [0.229, 0.224, 0.225],
+    "resize_after_normalization": [322, 322],
+    "antialias": True,
+    "resize_interpolation": "bilinear",
+    "dtype": "float32",
+    "augmentation": "none",
+    "whitening_or_pca": "none",
 }
 
 
 # Identity fields that define the descriptor space; device/software details may differ
 # between a gallery built on Apple MPS and a CPU/CUDA server without changing it.
 MODEL_IDENTITY_KEYS = (
-    "source_repository", "source_revision", "source_sha256", "weights_repository",
-    "weights_revision", "weights_sha256", "preprocessing",
+    "source_repository",
+    "source_revision",
+    "source_sha256",
+    "weights_repository",
+    "weights_revision",
+    "weights_sha256",
+    "preprocessing",
 )
 
 
@@ -70,6 +80,40 @@ def contiguous_conv_inputs(module: Any, inputs: tuple[Any, ...]) -> tuple[Any, .
     return tuple(value.contiguous() for value in inputs)
 
 
+def cache_pos_encoding(model: Any) -> int:
+    """Memoise DINOv2 positional-embedding interpolation per (size, dtype, device).
+
+    The interpolation depends only on the input size, which is fixed (322x322). Its
+    bicubic operator has no MPS kernel, so without the cache every forward pass falls
+    back to the CPU and synchronises with the GPU. The cached tensor is the exact
+    result of the original method; descriptors are unchanged (verified bit-identical
+    in eval/encode_benchmark.py). Returns the number of patched modules.
+    """
+    patched = 0
+    for module in model.modules():
+        original = getattr(module, "interpolate_pos_encoding", None)
+        if original is None or getattr(original, "_cached", False):
+            continue
+        memo: dict[tuple[Any, ...], Any] = {}
+
+        def cached(
+            x: Any,
+            w: int,
+            h: int,
+            _original: Any = original,
+            _memo: dict[tuple[Any, ...], Any] = memo,
+        ) -> Any:
+            key = (x.shape[1], x.shape[-1], w, h, x.dtype, x.device)
+            if key not in _memo:
+                _memo[key] = _original(x, w, h).detach()
+            return _memo[key]
+
+        cached._cached = True  # type: ignore[attr-defined]
+        module.interpolate_pos_encoding = cached
+        patched += 1
+    return patched
+
+
 def load_assets(root: Path) -> tuple[Path, Path, dict[str, Any]]:
     """Download immutable upstream assets, verify reviewed source, and retain licenses."""
     from huggingface_hub import hf_hub_download
@@ -91,26 +135,39 @@ def load_assets(root: Path) -> tuple[Path, Path, dict[str, Any]]:
         raise ValueError("MegaLoc source checksum differs from the reviewed pinned implementation")
     downloaded = {}
     for filename in ("LICENSE", "README.md", "model.safetensors"):
-        downloaded[filename] = Path(hf_hub_download(
-            repo_id="gberton/MegaLoc", filename=filename, revision=WEIGHTS_REVISION,
-            cache_dir="data/huggingface/hub", token=False,
-        ))
+        downloaded[filename] = Path(
+            hf_hub_download(
+                repo_id="gberton/MegaLoc",
+                filename=filename,
+                revision=WEIGHTS_REVISION,
+                cache_dir="data/huggingface/hub",
+                token=False,
+            )
+        )
     weights = downloaded["model.safetensors"]
-    return code, weights, {
-        "source_repository": "https://github.com/gmberton/MegaLoc",
-        "source_revision": SOURCE_REVISION, "source_sha256": file_hash(code),
-        "weights_repository": "https://huggingface.co/gberton/MegaLoc",
-        "weights_revision": WEIGHTS_REVISION, "weights_sha256": file_hash(weights),
-        "source_license_sha256": file_hash(source / "LICENSE"),
-        "weights_license_sha256": file_hash(downloaded["LICENSE"]),
-        "preprocessing": PREPROCESSING,
-    }
+    return (
+        code,
+        weights,
+        {
+            "source_repository": "https://github.com/gmberton/MegaLoc",
+            "source_revision": SOURCE_REVISION,
+            "source_sha256": file_hash(code),
+            "weights_repository": "https://huggingface.co/gberton/MegaLoc",
+            "weights_revision": WEIGHTS_REVISION,
+            "weights_sha256": file_hash(weights),
+            "source_license_sha256": file_hash(source / "LICENSE"),
+            "weights_license_sha256": file_hash(downloaded["LICENSE"]),
+            "preprocessing": PREPROCESSING,
+        },
+    )
 
 
 class MegaLocEmbedder:
     """Load pinned MegaLoc once; encode paths (with a resumable cache) or in-memory images."""
 
-    def __init__(self, root: Path, device: str) -> None:
+    def __init__(
+        self, root: Path, device: str, dtype: str = "float32", cache_pos: bool = True
+    ) -> None:
         import torch
         import torchvision
         from safetensors.torch import load_file
@@ -128,8 +185,10 @@ class MegaLocEmbedder:
         self.model.load_state_dict(state, strict=True)
         del state
         if device == "auto":
-            device = "cuda" if torch.cuda.is_available() else (
-                "mps" if torch.backends.mps.is_available() else "cpu"
+            device = (
+                "cuda"
+                if torch.cuda.is_available()
+                else ("mps" if torch.backends.mps.is_available() else "cpu")
             )
         if device == "mps" and not torch.backends.mps.is_available():
             raise RuntimeError("Apple GPU is unavailable in this interpreter; use native macOS")
@@ -140,21 +199,37 @@ class MegaLocEmbedder:
                 if isinstance(layer, torch.nn.Conv2d):
                     layer.register_forward_pre_hook(contiguous_conv_inputs)
         self.device = device
-        self.transform = tfm.Compose([
-            tfm.ToTensor(), tfm.Normalize(mean=PREPROCESSING["mean"], std=PREPROCESSING["std"]),
-            tfm.Resize(size=[322, 322], antialias=True),
-        ])
+        self.transform = tfm.Compose(
+            [
+                tfm.ToTensor(),
+                tfm.Normalize(mean=PREPROCESSING["mean"], std=PREPROCESSING["std"]),
+                tfm.Resize(size=[322, 322], antialias=True),
+            ]
+        )
         self.identity = {
-            **identity, "device": device, "torch": torch.__version__,
-            "torchvision": torchvision.__version__, "python": platform.python_version(),
+            **identity,
+            "device": device,
+            "torch": torch.__version__,
+            "torchvision": torchvision.__version__,
+            "python": platform.python_version(),
             "platform": platform.platform(),
             "mps_cpu_fallback_enabled": os.environ.get("PYTORCH_ENABLE_MPS_FALLBACK") == "1",
             "conv_input_layout": "contiguous" if device == "mps" else "upstream",
         }
+        if dtype not in ("float32", "float16"):
+            raise ValueError("dtype must be float32 or float16")
+        if dtype != "float32":
+            # Only non-default precision enters the identity, so existing fp32 caches keep
+            # their keys. fp16 output is re-normalised in fp32 (see batch_images).
+            self.identity["dtype"] = dtype
+        self.dtype = getattr(torch, dtype)
         key = hashlib.sha256(json.dumps(self.identity, sort_keys=True).encode()).hexdigest()
         self.cache = root / "descriptors" / key
         self.cache.mkdir(parents=True, exist_ok=True)
+        # Weights stay fp32: the pinned model mixes in fp32 constants, so a plain .half()
+        # fails; fp16 runs through autocast instead (see batch_tensors).
         self.model.to(device)
+        self.pos_cache_modules = cache_pos_encoding(self.model) if cache_pos else 0
 
     def batch(self, paths: list[Path]) -> np.ndarray:
         """Apply the official single-image preprocessing without crops or test augmentation."""
@@ -168,12 +243,20 @@ class MegaLocEmbedder:
 
     def batch_images(self, images: list[Any]) -> np.ndarray:
         """Encode RGB PIL images held in memory."""
+        return self.batch_tensors([self.transform(image.convert("RGB")) for image in images])
+
+    def batch_tensors(self, tensors: list[Any]) -> np.ndarray:
+        """Encode already-preprocessed CHW tensors (lets callers decode in parallel)."""
         import torch
 
-        tensors = [self.transform(image.convert("RGB")) for image in images]
-        with torch.inference_mode():
-            result = self.model(torch.stack(tensors).to(self.device)).cpu().numpy()
-        return checked_vectors(result, len(images))
+        half = self.dtype == torch.float16
+        with torch.inference_mode(), torch.autocast(self.device, torch.float16, enabled=half):
+            x = torch.stack(tensors).to(self.device)
+            y = self.model(x).float()
+            if self.dtype != torch.float32:
+                y = torch.nn.functional.normalize(y, dim=1)
+            result = y.cpu().numpy()
+        return checked_vectors(result, len(tensors))
 
     def embed_bytes(self, contents: bytes) -> np.ndarray:
         """Encode one uploaded image without writing it anywhere; returns shape (DIM,)."""
@@ -200,9 +283,12 @@ class MegaLocEmbedder:
         if float(cosine.min()) < 0.999 or difference > 0.001:
             raise RuntimeError("Accelerated MegaLoc outputs differ materially from CPU")
         return {
-            "image_count": len(paths), "device": selected,
-            "cpu_seconds": cpu_seconds, "accelerated_first_batch_seconds": seconds,
-            "minimum_cpu_device_cosine": float(cosine.min()), "maximum_abs_difference": difference,
+            "image_count": len(paths),
+            "device": selected,
+            "cpu_seconds": cpu_seconds,
+            "accelerated_first_batch_seconds": seconds,
+            "minimum_cpu_device_cosine": float(cosine.min()),
+            "maximum_abs_difference": difference,
         }
 
     def embed(self, paths: list[Path], hashes: list[str], batch_size: int) -> np.ndarray:
@@ -220,7 +306,7 @@ class MegaLocEmbedder:
                 pending.append(i)
         print(f"Descriptors cached: {len(paths) - len(pending)}/{len(paths)}", flush=True)
         for start in range(0, len(pending), batch_size):
-            indices = pending[start:start + batch_size]
+            indices = pending[start : start + batch_size]
             vectors = self.batch([paths[i] for i in indices])
             for i, vector in zip(indices, vectors, strict=True):
                 result[i] = vector
@@ -232,7 +318,8 @@ class MegaLocEmbedder:
                     temporary.replace(destination)
                 finally:
                     temporary.unlink(missing_ok=True)
-            print(f"Embedded {len(paths) - len(pending) + start + len(indices)}/{len(paths)}",
-                  flush=True)
+            print(
+                f"Embedded {len(paths) - len(pending) + start + len(indices)}/{len(paths)}",
+                flush=True,
+            )
         return checked_vectors(result, len(paths))
-
