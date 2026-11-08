@@ -14,7 +14,7 @@ identical apart from GPU floating-point rounding, which step 7 checks.
 | Copy the gallery back | Cloud → Mac | ~5 GB images + ~3.3 GB descriptors + JSON |
 | Verify descriptors, coverage map, evaluation | Mac | — |
 
-## 1. Choose a machine
+## 1. Choose a machine (preference: RTX 3090, A40, RTX 4000 Ada; EU; ≤ $1/h)
 
 Any recent NVIDIA GPU works; the build is limited by downloading and JPEG decoding
 more than by the GPU. Recommended:
@@ -29,103 +29,74 @@ more than by the GPU. Recommended:
 CUDA 12.x and Ubuntu 22.04 (e.g. RunPod "PyTorch 2.x" template). Prefer a host with
 several CPU cores and fast download bandwidth over a bigger GPU.
 
-## 2. Copy code and the frozen plan to the machine (from the Mac)
+## 2. Create the pod (RunPod API)
 
-The Mapillary token and `.env` are **never** copied.
+- Image: `runpod/pytorch:1.6.0-cu1281-torch280-ubuntu2404`. Its default `python` is
+  Python 3.12 (deadsnakes; verified from the image's build history) and it ships rsync,
+  tmux and sshd, so setup needs no GitHub download and no apt installs.
+- Env: `PUBLIC_KEY` = the dedicated `~/.ssh/heimdall_runpod.pub`;
+  `MAPILLARY_ACCESS_TOKEN` = `{{ RUNPOD_SECRET_mapillary_token }}`. RunPod fills it in
+  from the account secret, so the token is never read, printed or copied by us.
+- Ports `22/tcp` with a public IP (rsync needs real SSH, not the SSH proxy).
+- Time limit: if setup (creation → "GPU visible, MegaLoc loads") takes > 15 min,
+  terminate.
+
+## 3. Copy code and data (from the Mac)
 
 ```bash
-# On the Mac, from the repository root. HOST/PORT come from the provider's SSH panel.
-HOST=root@<ip>; PORT=<port>
-cd ~/Documents/GitHub/heimdall-spy/swespy
-rsync -avP -e "ssh -p $PORT" \
-  --exclude .env --exclude '.venv*' --exclude data --exclude qdrant_storage \
-  --exclude '__pycache__' ./ $HOST:/workspace/swespy/
-# Frozen plan + the two eval manifests the leakage guards need (metadata only;
-# the test manifest is read by the sealed guard and is deleted again in step 8).
-rsync -avP -e "ssh -p $PORT" -R \
-  data/gallery_v2/plan.json data/gallery_v2/plan-report.json \
+rsync -a --exclude-from=<excludes: .env*, data/, .venv*, .uv-python/, caches> ./ pod:/root/work/swespy/
+rsync -aR data/gallery_v2/plan.json data/gallery_v2/plan-report.json \
   data/public_eval/recent_linkoping_streets_v1/manifest.json \
-  data/paired_views/recent_pilot_v2/manifest.json \
-  $HOST:/workspace/swespy/
+  data/megaloc/assets/<pinned revision>/ pod:/root/work/swespy/
 ```
 
-## 3. Set up Python (on the machine)
+The **test-set manifest is not copied**: the build runs with `--defer-sealed-guard` and
+the sealed guard is applied on the Mac (step 6). The pinned MegaLoc source and licence
+are copied (the checksum check still runs); the weights come from Hugging Face.
+
+## 4. Set up on the pod
 
 ```bash
-ssh -p $PORT $HOST
-cd /workspace/swespy
-pip install uv==0.9.5
-uv sync --frozen            # torch 2.5.1 Linux wheels include CUDA 12.4
-uv run python -c "import torch; print(torch.cuda.get_device_name(0))"
+ssh pod 'bash /root/work/swespy/scripts/cloud_setup.sh'
 ```
 
-MegaLoc source and weights download on first use from GitHub/Hugging Face at the
-pinned revisions and are checksum-verified (`swespy/model/megaloc.py`).
+`uv sync --frozen` with the image's `/usr/bin/python3.12` and `UV_PYTHON_DOWNLOADS=never`
+(PyPI only), then prints `token_present: True` (never the value), the GPU name and
+`megaloc_loaded: device cuda`.
 
-## 4. Provide the Mapillary token for this session only
+## 5. Run the build in tmux
 
 ```bash
-read -rs MAPILLARY_ACCESS_TOKEN && export MAPILLARY_ACCESS_TOKEN   # paste, Enter; not echoed
+ssh pod 'tmux new -d -s build "bash /root/work/swespy/scripts/cloud_build.sh 2>&1 | tee -a /root/work/swespy/data/gallery_v2/build.log"'
 ```
 
-`read -s` keeps it out of shell history; it lives only in this shell's environment
-and is read by `swespy.config.Settings`. Do not put it in a provider "environment
-variables" template (stored in their dashboard) or in any file. Run the build inside
-`tmux` so it survives a dropped SSH connection — start `tmux` *before* the `read`
-line, or repeat the `read` inside tmux.
+Watch read-only: `ssh -t pod tmux attach -r -t build` (detach `Ctrl-b d`). Resumable:
+rerun the same command after any interruption.
 
-## 5. Run the build
+## 6. Copy back, finalize and verify (on the Mac)
 
 ```bash
-tmux new -s build
-# (repeat step 4 here if you started tmux after it)
-uv run python -u -m eval.gallery_build --stage recent   --device cuda \
-    --dtype float32 --batch-size 64 2>&1 | tee -a data/gallery_v2/build.log
-uv run python -u -m eval.gallery_build --stage historic --device cuda \
-    --dtype float32 --batch-size 64 2>&1 | tee -a data/gallery_v2/build.log
-```
-
-Keep `float32`: fp16 changed the top-1 match for 2 of the 66 dev photos and the top-5
-set for 8 of them in our check (`docs/experiments/05_build_speed.md`). It would also
-not match the Mac's fp32 query encoder. Both commands resume where they stopped; rerun the same line after any interruption.
-Detach with `Ctrl-b d`, reattach with `tmux attach -t build`.
-
-## 6. Copy the result back to the Mac
-
-```bash
-# On the Mac:
-cd ~/Documents/GitHub/heimdall-spy/swespy
-rsync -avP -e "ssh -p $PORT" $HOST:/workspace/swespy/data/gallery_v2/ data/gallery_v2/ \
-  --exclude 'mapillary/' --exclude 'commons/' --exclude 'kartaview/'
-rsync -avP -e "ssh -p $PORT" $HOST:/workspace/swespy/data/megaloc/descriptors/ \
-  data/megaloc/descriptors/
-```
-
-This brings `gallery-index-recent.json`, `gallery-index-historic.json`,
-`encoder-identity.json`, `chunks/` (per-chunk filter and guard reports), the stored
-640 px images (needed for Part 5 re-ranking) and the descriptor cache. Expect
-~8.5 GB; at 100 Mbit/s home bandwidth ≈ 12 min.
-
-## 7. Verify on the Mac before using the index
-
-```bash
+rsync -a pod:/root/work/swespy/data/gallery_v2/ data/gallery_v2/ \
+  --exclude plan.json --exclude plan-report.json
+rsync -a pod:/root/work/swespy/data/megaloc/descriptors/ data/megaloc/descriptors/
+for s in recent historic; do
+  .venv-benchmark/bin/python -m eval.gallery_build --stage $s --finalize-sealed
+done
 PYTORCH_ENABLE_MPS_FALLBACK=1 .venv-benchmark/bin/python -m eval.gallery_build \
-    --stage historic --verify 200 --device mps
+  --stage historic --verify 200 --device mps
+.venv-benchmark/bin/python -m eval.densify coverage --index-name gallery-index-recent.json
+.venv-benchmark/bin/python -m eval.densify coverage --index-name gallery-index-historic.json
 ```
 
-Re-encodes 200 random references with the Mac's encoder and compares them with the
-cloud descriptors; `"ok": true` requires cosine ≥ 0.999 for every one. If it fails, do
-not mix the cloud gallery with Mac-encoded queries; re-encode locally instead.
+`--finalize-sealed` applies the sealed test-set guard locally and reports counts only;
+`swespy.model.locator.Gallery` refuses an index whose sealed guard is still pending.
+`--verify` must report `"ok": true` (cosine ≥ 0.999 for 200 random references).
 
-## 8. Clean up (on the machine, then destroy it)
+## 7. Terminate
 
-```bash
-unset MAPILLARY_ACCESS_TOKEN
-rm -rf /workspace/swespy        # removes images, eval manifests and the plan
-```
-
-Then **terminate/destroy** the instance in the provider console (stopping alone may
-keep billing for storage).
+Terminate the pod via the API (`podTerminate`) — not just stop it — and confirm
+`myself { pods }` is empty. The container disk (code, images, dev manifest) is
+deleted with it.
 
 ## Expected time and cost
 
