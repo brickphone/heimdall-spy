@@ -713,6 +713,9 @@ def image_path(root: Path, ref: dict[str, Any]) -> Path:
     return root / "images" / ref["source"] / f"{ref['source_id']}.jpg"
 
 
+_LEGACY: dict[str, Path] | None = None  # Cached by the pipelined build.
+
+
 def legacy_images() -> dict[str, Path]:
     """Previously downloaded Mapillary thumbnails, reused instead of re-downloading."""
     found = {}
@@ -733,12 +736,20 @@ def valid_jpeg(path: Path) -> bool:
         return False
 
 
-async def download(root: Path, concurrency: int = 12) -> None:
-    token = get_settings().mapillary_access_token.strip()
+async def download(root: Path) -> None:
+    """Download every planned reference (used by the non-pipelined stage runner)."""
     refs = read_json(root / "plan.json")["references"]
-    legacy = legacy_images()
+    failures = await download_refs(root, refs, progress=True)
+    log("download", state="complete", failures=failures)
+
+
+async def download_refs(
+    root: Path, refs: list[dict[str, Any]], concurrency: int = 12, progress: bool = False
+) -> dict[str, int]:
+    """Download missing images for ``refs``; returns failure counts. Resumable."""
+    token = get_settings().mapillary_access_token.strip()
+    legacy = _LEGACY if _LEGACY is not None else legacy_images()
     todo = [r for r in refs if r["source"] != "self_collected" and not image_path(root, r).exists()]
-    log("download", planned=len(refs), remaining=len(todo))
     failures: Counter[str] = Counter()
     semaphore = asyncio.Semaphore(concurrency)
     async with httpx.AsyncClient(
@@ -806,9 +817,9 @@ async def download(root: Path, concurrency: int = 12) -> None:
         for start in range(0, len(batches), 4):
             if free_bytes(root) < MIN_FREE_BYTES:
                 log("download", state="stopped_low_disk", free_gb=free_bytes(root) / 2**30)
-                return
+                return dict(failures)
             await asyncio.gather(*[mapillary_batch(b) for b in batches[start : start + 4]])
-            if start % 40 == 0:
+            if progress and start % 40 == 0:
                 log(
                     "download",
                     mapillary_batches_done=min(start + 4, len(batches)),
@@ -820,10 +831,10 @@ async def download(root: Path, concurrency: int = 12) -> None:
         for start in range(0, len(others), 20):
             if free_bytes(root) < MIN_FREE_BYTES:
                 log("download", state="stopped_low_disk")
-                return
+                return dict(failures)
             await asyncio.gather(*[fetch(r, r["download_url"]) for r in others[start : start + 20]])
             await asyncio.sleep(1)  # Commons/KartaView: gentle pacing.
-    log("download", state="complete", failures=dict(failures))
+    return dict(failures)
 
 
 # ---------------------------------------------------------------- panorama crops

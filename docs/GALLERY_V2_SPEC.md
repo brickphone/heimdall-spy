@@ -48,8 +48,16 @@ implements these; deviations must be documented in
   `filter-report.json` and `gallery-index.json` (`eval/densify.py:build_parameters`).
 - Keep all panoramas; split each into perspective crops (separate references with
   derived headings).
-- Download and encoding are resumable and checkpointed (run overnight); respect API
-  rate limits with backoff.
+- Download and encoding are resumable and checkpointed; respect API rate limits with
+  backoff. The build is pipelined (download + filter and MegaLoc encoding run
+  concurrently, in 1,000-reference chunks) and **staged** (`eval/gallery_build.py`):
+  - `--stage recent`: Mapillary 2018+, all panoramas (as crops), Commons, KartaView,
+    approved self-collected frames → `gallery-index-recent.json`;
+  - `--stage historic`: adds pre-2018 Mapillary → `gallery-index-historic.json`.
+  Both use the same frozen plan, thinning, quality rules and leakage guards. Part 6
+  evaluates after each stage; this replaces the planned with/without-pre-2018 ablation
+  (decision 2026-11-07).
+- Encoding: MegaLoc fp32, batch 16 on the M1 (`docs/experiments/05_build_speed.md`).
 
 ## Quality filters (`swespy/eval/quality.py`)
 
