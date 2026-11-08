@@ -160,7 +160,11 @@ def assess(path: Path) -> dict[str, Any] | None:
 
 
 def filter_chunk(
-    root: Path, refs: list[dict[str, Any]], dedup: Deduper, pool: Any = None
+    root: Path,
+    refs: list[dict[str, Any]],
+    dedup: Deduper,
+    pool: Any = None,
+    defer_sealed: bool = False,
 ) -> dict[str, Any]:
     dropped: Counter[str] = Counter()
     kept = []
@@ -184,7 +188,11 @@ def filter_chunk(
         kept.append(row)
     dropped = Counter({k: v for k, v in dropped.items() if v})
     kept, dev = leakage.guard_dev(kept)
-    kept, sealed = leakage.guard_sealed(kept)
+    # On a rented machine the test manifest is not copied: the sealed pixel-hash guard is
+    # deferred and applied on the Mac by ``finalize_sealed`` before the index can be used.
+    sealed: dict[str, Any] = {"deferred": True}
+    if not defer_sealed:
+        kept, sealed = leakage.guard_sealed(kept)
     bad = [r for r in kept if provenance.problems(r)]
     if bad:
         raise ValueError(f"{len(bad)} references violate the provenance contract")
@@ -205,6 +213,7 @@ async def produce(
     stop: threading.Event,
     dedup: Deduper,
     pool: Any = None,
+    defer_sealed: bool = False,
 ) -> None:
     for chunk_id, refs in chunks_for(root, stage):
         if stop.is_set():
@@ -217,7 +226,7 @@ async def produce(
         started = time.monotonic()
         failures = await densify.download_refs(root, refs)
         expanded = expand_panoramas(root, refs)
-        state = filter_chunk(root, expanded, dedup, pool)
+        state = filter_chunk(root, expanded, dedup, pool, defer_sealed)
         state.update(
             {
                 "chunk": chunk_id,
@@ -334,9 +343,11 @@ def write_index(root: Path, stage: str) -> Path:
         raise ValueError(f"{len(absent)} references lack descriptors")
     totals: Counter[str] = Counter()
     sealed: Counter[str] = Counter()
+    deferred = any(s["leakage_test_sealed_counts_only"].get("deferred") for s in states)
     for s in states:
         totals.update(s["dropped_by_rule"])
-        sealed.update(s["leakage_test_sealed_counts_only"])
+        if not deferred:
+            sealed.update(s["leakage_test_sealed_counts_only"])
     out = root / f"gallery-index-{stage}.json"
     densify.write_json(
         out,
@@ -362,6 +373,7 @@ def write_index(root: Path, stage: str) -> Path:
                 "dropped_by_rule": dict(totals),
             },
             "post_download_leakage_test_sealed_counts_only": dict(sealed),
+            "sealed_guard": "pending" if deferred else "applied_per_chunk",
         },
     )
     densify.log("index", build_stage=stage, references=len(refs))
@@ -369,7 +381,13 @@ def write_index(root: Path, stage: str) -> Path:
 
 
 def build(
-    root: Path, stage: str, device: str, dtype: str, batch: int, make_embedder: Any = None
+    root: Path,
+    stage: str,
+    device: str,
+    dtype: str,
+    batch: int,
+    make_embedder: Any = None,
+    defer_sealed: bool = False,
 ) -> Path:
     if stage == "historic":
         recent = [c for c, _ in chunks_for(root, "recent")]
@@ -399,7 +417,7 @@ def build(
     workers = max(1, min(8, (os.cpu_count() or 2) - 2))
     try:
         with ProcessPoolExecutor(max_workers=workers) as pool:
-            asyncio.run(produce(root, stage, work, stop, dedup, pool))
+            asyncio.run(produce(root, stage, work, stop, dedup, pool, defer_sealed))
     finally:
         if stop.is_set() or errors:
             try:
@@ -410,6 +428,30 @@ def build(
     if errors:
         raise errors[0]
     return write_index(root, stage)
+
+
+def finalize_sealed(root: Path, stage: str) -> dict[str, Any]:
+    """Apply the deferred sealed test-set guard on the Mac; reports counts only."""
+    path = root / f"gallery-index-{stage}.json"
+    saved = densify.read_json(path)
+    if saved.get("sealed_guard") != "pending":
+        raise ValueError(f"Sealed guard is not pending for {path.name}")
+    kept, counts = leakage.guard_sealed(saved["references_in_index_order"])
+    saved.update(
+        {
+            "references_in_index_order": kept,
+            "index_sha256": hashlib.sha256(
+                "\n".join(r["sha256"] for r in kept).encode()
+            ).hexdigest(),
+            "post_download_leakage_test_sealed_counts_only": counts,
+            "sealed_guard": "applied_on_mac",
+            "sealed_guard_applied_at": datetime.now(UTC).isoformat(),
+        }
+    )
+    densify.write_json(path, saved)
+    result = {"index": path.name, "references": len(kept), **counts}
+    densify.log("finalize_sealed", **result)
+    return result
 
 
 def verify(root: Path, stage: str, device: str, sample: int, seed: int = 0) -> dict[str, Any]:
@@ -462,15 +504,37 @@ def main() -> None:
         metavar="N",
         help="Only re-encode N random references and compare descriptors",
     )
+    parser.add_argument(
+        "--defer-sealed-guard",
+        action="store_true",
+        help="Do not read the test manifest here (rented machine); finalize on the Mac",
+    )
+    parser.add_argument(
+        "--finalize-sealed",
+        action="store_true",
+        help="Apply the deferred sealed guard to gallery-index-<stage>.json (Mac only)",
+    )
     parser.add_argument("--root", type=Path, default=densify.ROOT)
     parser.add_argument("--device", default="auto")
     parser.add_argument("--dtype", choices=["float32", "float16"], default=DEFAULT_DTYPE)
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH)
     args = parser.parse_args()
+    if args.finalize_sealed:
+        print(json.dumps(finalize_sealed(args.root, args.stage)))
+        return
     if args.verify:
         print(json.dumps(verify(args.root, args.stage, args.device, args.verify)))
         return
-    print(build(args.root, args.stage, args.device, args.dtype, args.batch_size))
+    print(
+        build(
+            args.root,
+            args.stage,
+            args.device,
+            args.dtype,
+            args.batch_size,
+            defer_sealed=args.defer_sealed_guard,
+        )
+    )
 
 
 if __name__ == "__main__":

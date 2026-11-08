@@ -104,3 +104,30 @@ def test_recent_then_historic_with_resume(setup):
     assert ids | {"mapillary-101", "mapillary-104"} == all_ids
     assert historic["stages_included"] == ["recent", "historic"]
     assert historic["build_parameters"]["thinning"]["distance_m"] == 10.0
+
+
+def test_deferred_sealed_guard_is_applied_on_finalize(setup, monkeypatch):
+    from eval import leakage
+    from swespy.model.locator import Gallery
+
+    root, embedder = setup
+    index = gallery_build.build(root, "recent", "cpu", "float32", 4, lambda: embedder,
+                                defer_sealed=True)
+    saved = json.loads(index.read_text())
+    assert saved["sealed_guard"] == "pending"
+    with pytest.raises(ValueError, match="sealed"):
+        Gallery(index)
+    # Synthetic test manifest whose only photo is a byte-copy of one gallery reference.
+    planted = saved["references_in_index_order"][0]
+    manifest = root / "test-manifest.json"
+    manifest.write_text(json.dumps({"fresh_commons_ids": ["commons-1"], "images": [{
+        "image_id": "commons-1", "lat": 0.0, "lng": 0.0, "capture_date": "2001-01-01",
+        "creator": "x", "sha256": planted["sha256"], "phash": None, "dhash": None}]}))
+    real = leakage.guard_sealed
+    monkeypatch.setattr(leakage, "guard_sealed", lambda refs: real(refs, manifest))
+    result = gallery_build.finalize_sealed(root, "recent")
+    assert result["excluded"] == 1 and result["eval_photo_itself"] == 1
+    final = json.loads(index.read_text())
+    assert final["sealed_guard"] == "applied_on_mac"
+    assert planted["ref_id"] not in {r["ref_id"] for r in final["references_in_index_order"]}
+    assert Gallery(index).refs  # Loadable once finalized.

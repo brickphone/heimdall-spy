@@ -35,6 +35,9 @@ class Gallery:
         import faiss
 
         saved = json.loads(manifest_path.read_text())
+        if saved.get("sealed_guard") == "pending":
+            raise ValueError("Gallery has not passed the sealed test-set guard; run "
+                             "eval.gallery_build --finalize-sealed first")
         refs = saved["references_in_index_order"]
         keep = [i for i, r in enumerate(refs) if in_area(r["lng"], r["lat"], polygon)]
         if not keep:
