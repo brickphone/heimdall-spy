@@ -23,8 +23,10 @@ from eval.geo_eval import haversine_m
 from swespy.config import LINKOPING_AREA, in_area
 
 OVERPASS = "https://overpass-api.de/api/interpreter"
-WALKABLE = ("residential|living_street|pedestrian|footway|path|cycleway|tertiary|"
-            "secondary|primary|unclassified|service|steps")
+WALKABLE = (
+    "residential|living_street|pedestrian|footway|path|cycleway|tertiary|"
+    "secondary|primary|unclassified|service|steps"
+)
 GAP_MAX_REFS = 2  # A 250 m cell with <= 2 references counts as a gap.
 MIN_STREET_M = 150  # Ignore cells with almost no walkable street.
 
@@ -35,19 +37,33 @@ def streets(root: Path) -> list[dict[str, Any]]:
     if cache.exists():
         return read_json(cache)
     west, south, east, north = polygon_bbox()
-    query = (f'[out:json][timeout:180];way["highway"~"^({WALKABLE})$"]'
-             f"({south},{west},{north},{east});out tags geom;")
+    query = (
+        f'[out:json][timeout:180];way["highway"~"^({WALKABLE})$"]'
+        f"({south},{west},{north},{east});out tags geom;"
+    )
     r = httpx.post(OVERPASS, data={"data": query}, headers={"User-Agent": UA}, timeout=240)
     r.raise_for_status()
-    ways = [{"name": w.get("tags", {}).get("name"), "highway": w["tags"]["highway"],
-             "geometry": [(p["lat"], p["lon"]) for p in w.get("geometry", [])]}
-            for w in r.json()["elements"]]
+    ways = [
+        {
+            "name": w.get("tags", {}).get("name"),
+            "highway": w["tags"]["highway"],
+            "geometry": [(p["lat"], p["lon"]) for p in w.get("geometry", [])],
+        }
+        for w in r.json()["elements"]
+    ]
     write_json(cache, ways)
     return ways
 
 
 def propose(root: Path, count: int) -> dict[str, Any]:
-    grid = read_json(root / "density-grid.json")
+    grid = read_json(
+        root
+        / (
+            "density-grid-historic.json"
+            if (root / "density-grid-historic.json").exists()
+            else "density-grid.json"
+        )
+    )
     counts, mask = grid["counts"], grid["outside_mask"]
     west, south, dlat, dlng = grid["west"], grid["south"], grid["dlat"], grid["dlng"]
 
@@ -66,13 +82,17 @@ def propose(root: Path, count: int) -> dict[str, Any]:
             j, i = cell(m_lat, m_lng)
             if not (0 <= j < len(counts) and 0 <= i < len(counts[0])):
                 continue
-            street_m[(j, i)] += float(haversine_m(a_lat, a_lng, np.array([b_lat]),
-                                                  np.array([b_lng]))[0])
+            street_m[(j, i)] += float(
+                haversine_m(a_lat, a_lng, np.array([b_lat]), np.array([b_lng]))[0]
+            )
             segments[(j, i)].append([(a_lat, a_lng), (b_lat, b_lng)])
             if way["name"]:
                 names[(j, i)].add(way["name"])
-    gaps = {c for c, m in street_m.items()
-            if m >= MIN_STREET_M and not mask[c[0]][c[1]] and counts[c[0]][c[1]] <= GAP_MAX_REFS}
+    gaps = {
+        c
+        for c, m in street_m.items()
+        if m >= MIN_STREET_M and not mask[c[0]][c[1]] and counts[c[0]][c[1]] <= GAP_MAX_REFS
+    }
     # Connected gap areas (8-neighbourhood), ranked by unwalked street length.
     seen, clusters = set(), []
     for start in sorted(gaps):
@@ -93,41 +113,65 @@ def propose(root: Path, count: int) -> dict[str, Any]:
     clusters.sort(key=lambda m: -sum(street_m[c] for c in m))
     routes = []
     for rank, members in enumerate(clusters[:count], 1):
-        lat = float(np.mean([south + (c[0] + .5) * dlat for c in members]))
-        lng = float(np.mean([west + (c[1] + .5) * dlng for c in members]))
-        routes.append({
-            "rank": rank, "centre": {"lat": round(lat, 5), "lng": round(lng, 5)},
-            "gap_cells_250m": len(members),
-            "street_length_km": round(sum(street_m[c] for c in members) / 1000, 2),
-            "existing_references": sum(counts[c[0]][c[1]] for c in members),
-            "streets": sorted(set().union(*(names[c] for c in members)))[:25],
-            "cells": [[south + c[0] * dlat, west + c[1] * dlng] for c in members],
-            "segments": [s for c in members for s in segments[c]],
-        })
-    report = {"rule": f"250 m cells inside the polygon with <= {GAP_MAX_REFS} gallery "
-                      f"references and >= {MIN_STREET_M} m of walkable OSM street; "
-                      "adjacent cells merged; ranked by street length. Eval photo "
-                      "locations not used.",
-              "gap_cells": len(gaps), "gap_areas": len(clusters),
-              "routes": [{k: v for k, v in r.items() if k not in ("cells", "segments")}
-                         for r in routes]}
+        lat = float(np.mean([south + (c[0] + 0.5) * dlat for c in members]))
+        lng = float(np.mean([west + (c[1] + 0.5) * dlng for c in members]))
+        routes.append(
+            {
+                "rank": rank,
+                "centre": {"lat": round(lat, 5), "lng": round(lng, 5)},
+                "gap_cells_250m": len(members),
+                "street_length_km": round(sum(street_m[c] for c in members) / 1000, 2),
+                "existing_references": sum(counts[c[0]][c[1]] for c in members),
+                "streets": sorted(set().union(*(names[c] for c in members)))[:25],
+                "cells": [[south + c[0] * dlat, west + c[1] * dlng] for c in members],
+                "segments": [s for c in members for s in segments[c]],
+            }
+        )
+    report = {
+        "rule": f"250 m cells inside the polygon with <= {GAP_MAX_REFS} gallery "
+        f"references and >= {MIN_STREET_M} m of walkable OSM street; "
+        "adjacent cells merged; ranked by street length. Eval photo "
+        "locations not used.",
+        "gap_cells": len(gaps),
+        "gap_areas": len(clusters),
+        "routes": [{k: v for k, v in r.items() if k not in ("cells", "segments")} for r in routes],
+    }
     write_json(root / "walk-routes.json", report)
-    features = [{"type": "Feature", "properties": {"rank": r["rank"]},
-                 "geometry": {"type": "MultiLineString",
-                              "coordinates": [[[p[1], p[0]] for p in s] for s in r["segments"]]}}
-                for r in routes]
+    features = [
+        {
+            "type": "Feature",
+            "properties": {"rank": r["rank"]},
+            "geometry": {
+                "type": "MultiLineString",
+                "coordinates": [[[p[1], p[0]] for p in s] for s in r["segments"]],
+            },
+        }
+        for r in routes
+    ]
     write_json(root / "walk-routes.geojson", {"type": "FeatureCollection", "features": features})
     render(root, routes, grid, dlat, dlng)
     return report
 
 
-def render(root: Path, routes: list[dict[str, Any]], grid: dict[str, Any], dlat: float,
-           dlng: float) -> None:
+def render(
+    root: Path, routes: list[dict[str, Any]], grid: dict[str, Any], dlat: float, dlng: float
+) -> None:
     colours = ["#d32f2f", "#1565c0", "#2e7d32", "#ef6c00", "#6a1b9a"]
-    data = {"poly": [[p[1], p[0]] for p in LINKOPING_AREA],
-            "routes": [{"rank": r["rank"], "segments": r["segments"], "cells": r["cells"],
-                        "km": r["street_length_km"], "streets": r["streets"][:8]}
-                       for r in routes], "dlat": dlat, "dlng": dlng}
+    data = {
+        "poly": [[p[1], p[0]] for p in LINKOPING_AREA],
+        "routes": [
+            {
+                "rank": r["rank"],
+                "segments": r["segments"],
+                "cells": r["cells"],
+                "km": r["street_length_km"],
+                "streets": r["streets"][:8],
+            }
+            for r in routes
+        ],
+        "dlat": dlat,
+        "dlng": dlng,
+    }
     page = f"""<!doctype html><meta charset="utf-8"><title>Walk route proposals</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>

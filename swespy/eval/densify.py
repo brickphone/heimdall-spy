@@ -1005,13 +1005,14 @@ def index(root: Path) -> None:
 # ---------------------------------------------------------------- coverage
 
 
-def coverage(root: Path) -> None:
+def coverage(root: Path, index_name: str = "gallery-index.json") -> None:
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    refs = read_json(root / "gallery-index.json")["references_in_index_order"]
+    tag = index_name.removeprefix("gallery-index").removesuffix(".json")  # "" or "-recent"
+    refs = read_json(root / index_name)["references_in_index_order"]
     lats, lngs = np.array([r["lat"] for r in refs]), np.array([r["lng"] for r in refs])
     dev = read_json(leakage.DEV_MANIFEST)["queries"]
     old = read_json(Path(get_settings().gallery_index))["references_in_index_order"]
@@ -1062,9 +1063,9 @@ def coverage(root: Path) -> None:
         f"Gallery v2 reference density ({len(refs):,} references; "
         f"{empty}/{inside_cells} cells empty)"
     )
-    fig.savefig(root / "coverage.png", dpi=130, bbox_inches="tight")
+    fig.savefig(root / f"coverage{tag}.png", dpi=130, bbox_inches="tight")
     write_json(
-        root / "density-grid.json",
+        root / f"density-grid{tag}.json",
         {
             "cell_m": cell,
             "west": west,
@@ -1088,7 +1089,7 @@ def coverage(root: Path) -> None:
             "gallery_v2": dist(nearest_new),
         },
     }
-    write_json(root / "coverage-report.json", report)
+    write_json(root / f"coverage-report{tag}.json", report)
     log("coverage", **report)
 
 
@@ -1114,6 +1115,11 @@ def main() -> None:
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--device", default="mps")
     parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument(
+        "--index-name",
+        default="gallery-index.json",
+        help="coverage: e.g. gallery-index-recent.json",
+    )
     args = parser.parse_args()
     args.root.mkdir(parents=True, exist_ok=True)
     stage = args.stage
@@ -1136,7 +1142,7 @@ def main() -> None:
     elif stage == "index":
         index(args.root)
     else:
-        coverage(args.root)
+        coverage(args.root, args.index_name)
 
 
 if __name__ == "__main__":
