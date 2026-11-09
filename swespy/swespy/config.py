@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     retrieval_depth: int = 50
     # Geometric re-ranking (Part 5); weight/threshold tuned on the dev set only.
     rerank_enabled: bool = True
+    field_photos_dir: str = "data/field_photos"  # Opt-in demo saves; future eval only.
     rerank_k: int = 5  # Candidates verified (sweep 2026-11-09: K=5 matches K=50 on dev, 4 s).
     rerank_device: str = "auto"  # ALIKED device; LightGlue runs on CPU when this is MPS.
     s2_cell_level: int = 14
@@ -80,7 +81,8 @@ class Settings(BaseSettings):
     bbox_grid_lat_divisions: int = 6
     min_clean_file_size_kb: int = 100
     max_upload_size_mb: int = 10
-    allowed_image_types: tuple[str, ...] = ("image/jpeg", "image/png")
+    allowed_image_types: tuple[str, ...] = ("image/jpeg", "image/png", "image/heic",
+                                            "image/heif")
     api_rate_limit_per_minute: int = 60
     log_level: str = "INFO"
     testing: bool = False

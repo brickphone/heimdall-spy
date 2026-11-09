@@ -34,3 +34,5 @@ data/classifier/
 data/paired_views/
 data/gallery_v2/
 data/crossview/
+data/field_photos/
+data/torch/

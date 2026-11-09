@@ -37,6 +37,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# iPhone HEIC uploads. pillow-heif binary wheels are GPL-2.0 (bundled x265 encoder; only
+# the LGPL decoders are used). Optional so the default Docker image carries no GPL code.
+heic = [
+    "pillow-heif==1.8.1",
+]
 dev = [
     "ruff==0.9.1",
     "mypy==1.14.1",

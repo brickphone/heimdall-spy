@@ -17,7 +17,10 @@ import numpy as np
 from swespy.config import LINKOPING_AREA, in_area
 from swespy.model.megaloc import file_hash, same_descriptor_space
 
-REFERENCE_FIELDS = ("image_id", "lat", "lng", "creator", "source_url", "license_url")
+LOAD_CHUNK = 4096
+REFERENCE_FIELDS = (
+    "image_id", "lat", "lng", "creator", "source", "source_url", "license_url", "capture_year",
+)
 
 
 class Gallery:
@@ -49,11 +52,18 @@ class Gallery:
             if digest != saved["index_sha256"]:
                 raise ValueError("Gallery reference list differs from its manifest checksum")
             folder = Path(saved["descriptor_dir"])
-            vectors = np.stack([np.load(folder / f"{refs[i]['sha256']}.npy", allow_pickle=False)
-                                for i in keep]).astype(np.float32)
-            if vectors.shape[1] != saved["dimension"]:
-                raise ValueError("Descriptor dimension differs from the manifest")
-            self.index.add(vectors)
+            # Stream descriptors into the index in chunks: peak memory is the index itself
+            # (~3.1 GB for 91k refs) plus one small buffer, not several full copies.
+            dim = saved["dimension"]
+            buffer = np.empty((min(LOAD_CHUNK, len(keep)), dim), dtype=np.float32)
+            for start in range(0, len(keep), LOAD_CHUNK):
+                rows = keep[start:start + LOAD_CHUNK]
+                for j, i in enumerate(rows):
+                    vector = np.load(folder / f"{refs[i]['sha256']}.npy", allow_pickle=False)
+                    if vector.shape != (dim,):
+                        raise ValueError("Descriptor dimension differs from the manifest")
+                    buffer[j] = vector
+                self.index.add(buffer[: len(rows)])
         else:
             index_path = manifest_path.parent / "gallery.faiss"
             if file_hash(index_path) != saved["index_sha256"]:
@@ -66,7 +76,24 @@ class Gallery:
         self.excluded_outside_area = len(refs) - len(keep)
         self.identity: dict[str, Any] = saved["model_identity"]
         self.root = manifest_path.parent  # Reference image paths are relative to this.
+        self.manifest_name = manifest_path.name
+        self.stage = saved.get("stage")
+        self.created_at = saved.get("created_at")
+        self.sealed_guard = saved.get("sealed_guard")
+        self.by_image_id = {r.get("image_id"): i for i, r in enumerate(self.refs)}
         self.index_sha256: str = saved["index_sha256"]
+
+    def reference(self, image_id: str) -> dict[str, Any] | None:
+        i = self.by_image_id.get(image_id)
+        return None if i is None else self.refs[i]
+
+    def image_path(self, image_id: str) -> Path | None:
+        """Stored reference image for ``image_id`` (looked up, never built from user input)."""
+        ref = self.reference(image_id)
+        if ref is None or "path" not in ref:
+            return None
+        path = self.root / ref["path"]
+        return path if path.is_file() else None
 
     def search(self, vectors: np.ndarray, depth: int) -> tuple[np.ndarray, np.ndarray]:
         """Return (reference indices, cosine similarities) for each query row."""
@@ -95,6 +122,32 @@ class GeoLocator:
         self.verifier, self.weight, self.min_inliers = verifier, weight, min_inliers
         self.rerank_k = min(rerank_k or depth, depth)
 
+    def versions(self) -> dict[str, Any]:
+        """What produced a result: model, gallery and re-ranking settings."""
+        ident = self.embedder.identity
+        out: dict[str, Any] = {
+            "model": {"name": "MegaLoc", "source_revision": ident.get("source_revision"),
+                      "weights_revision": ident.get("weights_revision"),
+                      "weights_sha256": str(ident.get("weights_sha256", ""))[:16],
+                      "device": ident.get("device")},
+            "gallery": {"file": self.gallery.manifest_name, "stage": self.gallery.stage,
+                        "references": len(self.gallery.refs),
+                        "index_sha256": self.gallery.index_sha256[:16],
+                        "created_at": self.gallery.created_at,
+                        "sealed_guard": self.gallery.sealed_guard},
+            "retrieval_depth": self.depth,
+            "rerank": {"enabled": self.verifier is not None},
+        }
+        if self.verifier is not None:
+            v = self.verifier.identity
+            out["rerank"].update({
+                "k": self.rerank_k, "weight": self.weight, "min_inliers": self.min_inliers,
+                "extractor": v.get("extractor"), "matcher": v.get("matcher"),
+                "max_keypoints": v.get("max_keypoints"),
+                "lightglue_commit": v.get("lightglue_commit"), "ransac": v.get("ransac"),
+            })
+        return out
+
     def locate_vector(self, vector: np.ndarray) -> dict[str, Any]:
         indices, similarities = self.gallery.search(vector, self.depth)
         order, sims = indices[0].tolist(), similarities[0].tolist()
@@ -117,15 +170,13 @@ class GeoLocator:
 
     def locate_bytes(self, contents: bytes) -> dict[str, Any]:
         """Locate an uploaded image held only in memory (re-ranked if a verifier is set)."""
-        result = self.locate_vector(self.embedder.embed_bytes(contents))
+        from swespy.model.imageio import decode_upload
+
+        # One decode for both stages: upright RGB pixels only, no EXIF/GPS metadata.
+        image = decode_upload(contents)
+        result = self.locate_vector(self.embedder.embed_image(image))
         if self.verifier is None:
             return result
-        from io import BytesIO
-
-        from PIL import Image
-
-        with Image.open(BytesIO(contents)) as im:
-            image = im.convert("RGB")
         return self.rerank_result(result, image)
 
     def rerank_result(self, result: dict[str, Any], image: Any) -> dict[str, Any]:

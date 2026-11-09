@@ -35,7 +35,7 @@ def gallery_files(tmp_path: Path) -> Path:
 class FakeEmbedder:
     identity = {**IDENTITY, "device": "cpu"}  # Device may differ; descriptor space may not.
 
-    def embed_bytes(self, contents: bytes) -> np.ndarray:
+    def embed_image(self, image) -> np.ndarray:
         return np.array([0, 1, 0, 0], dtype=np.float32)
 
 
@@ -50,7 +50,13 @@ def test_gallery_excludes_references_outside_project_area(tmp_path: Path) -> Non
 
 def test_locator_ranks_and_reports_top_candidates(tmp_path: Path) -> None:
     locator = loc.GeoLocator(FakeEmbedder(), loc.Gallery(gallery_files(tmp_path)), top_k=2)
-    result = locator.locate_bytes(b"in-memory upload")
+    from io import BytesIO
+
+    from PIL import Image
+
+    buf = BytesIO()
+    Image.new("RGB", (8, 8)).save(buf, format="PNG")
+    result = locator.locate_bytes(buf.getvalue())
     assert (result["predicted_lat"], result["predicted_lng"]) == (58.4080, 15.5650)
     assert [c["image_id"] for c in result["candidates"]] == ["ryd", "centre"]
     assert result["candidates"][0]["similarity"] == pytest.approx(1.0)

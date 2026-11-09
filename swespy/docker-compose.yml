@@ -3,15 +3,18 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        EXTRAS: ""  # "heic" adds iPhone HEIC support (GPL-2.0 wheels; see docs/LICENSES.md)
     ports:
-      - "127.0.0.1:8000:8000"
-    env_file:
-      - path: .env
-        required: false
+      - "127.0.0.1:8000:8000"  # Localhost only.
     environment:
-      TESTING: "false"
       MEGALOC_DEVICE: "cpu"
-    # MegaLoc weights (data/huggingface, data/megaloc) and the exported gallery index
-    # (data/benchmarks/runs/...) are read from the mounted data directory.
+      RERANK_DEVICE: "cpu"
+    # Model weights, gallery index and reference images are mounted, never baked in.
     volumes:
-      - ./data:/app/data
+      - ./data/gallery_v2/gallery-index-historic.json:/app/data/gallery_v2/gallery-index-historic.json:ro
+      - ./data/gallery_v2/images:/app/data/gallery_v2/images:ro
+      - ./data/megaloc:/app/data/megaloc:ro
+      - ./data/huggingface:/app/data/huggingface:ro
+      - ./data/torch:/app/data/torch:ro
+      - ./data/field_photos:/app/data/field_photos  # Opt-in demo saves only.

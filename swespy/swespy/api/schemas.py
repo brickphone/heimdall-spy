@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -16,6 +18,8 @@ class MatchResult(BaseModel):
     creator: str | None = None
     source_url: str | None = None
     license_url: str | None = None
+    source: str | None = None
+    capture_year: int | None = None
     inliers: int | None = None
     score: float | None = None
 
@@ -40,3 +44,4 @@ class PredictResponse(BaseModel):
     confidence_reasons: list[str] = []
     top_matches: list[MatchResult]
     processing_time_ms: float
+    versions: dict[str, Any] = {}

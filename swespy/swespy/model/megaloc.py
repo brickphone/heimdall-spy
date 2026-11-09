@@ -12,7 +12,6 @@ import os
 import platform
 import time
 import uuid
-from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -225,7 +224,8 @@ class MegaLocEmbedder:
         self.dtype = getattr(torch, dtype)
         key = hashlib.sha256(json.dumps(self.identity, sort_keys=True).encode()).hexdigest()
         self.cache = root / "descriptors" / key
-        self.cache.mkdir(parents=True, exist_ok=True)
+        # Created lazily in embed(): the API never caches uploads, and in a container the
+        # data volume is mounted read-only.
         # Weights stay fp32: the pinned model mixes in fp32 constants, so a plain .half()
         # fails; fp16 runs through autocast instead (see batch_tensors).
         self.model.to(device)
@@ -258,12 +258,15 @@ class MegaLocEmbedder:
             result = y.cpu().numpy()
         return checked_vectors(result, len(tensors))
 
+    def embed_image(self, image: Any) -> np.ndarray:
+        """Encode one decoded RGB image (see swespy.model.imageio); returns shape (DIM,)."""
+        return self.batch_images([image])[0]
+
     def embed_bytes(self, contents: bytes) -> np.ndarray:
         """Encode one uploaded image without writing it anywhere; returns shape (DIM,)."""
-        from PIL import Image
+        from swespy.model.imageio import decode_upload
 
-        with Image.open(BytesIO(contents)) as image:
-            return self.batch_images([image.convert("RGB")])[0]
+        return self.embed_image(decode_upload(contents))
 
     def probe(self, paths: list[Path]) -> dict[str, Any]:
         """Check native acceleration against CPU outputs before the complete experiment."""
@@ -305,6 +308,8 @@ class MegaLocEmbedder:
             else:
                 pending.append(i)
         print(f"Descriptors cached: {len(paths) - len(pending)}/{len(paths)}", flush=True)
+        if pending:
+            self.cache.mkdir(parents=True, exist_ok=True)
         for start in range(0, len(pending), batch_size):
             indices = pending[start : start + batch_size]
             vectors = self.batch([paths[i] for i in indices])

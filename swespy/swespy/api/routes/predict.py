@@ -9,6 +9,7 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from loguru import logger
 
 from swespy.api.schemas import MatchResult, PredictResponse
+from swespy.model.imageio import UnsupportedImage
 
 router = APIRouter(tags=["predict"])
 
@@ -20,7 +21,7 @@ async def predict(request: Request, file: UploadFile = File(...)) -> PredictResp
     max_file_bytes = request.app.state.max_upload_size_mb * 1024 * 1024
 
     if file.content_type not in allowed_types:
-        raise HTTPException(status_code=400, detail="Only JPEG and PNG are supported")
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG and HEIC are supported")
 
     contents = await file.read()
     if len(contents) > max_file_bytes:
@@ -29,8 +30,8 @@ async def predict(request: Request, file: UploadFile = File(...)) -> PredictResp
     start = time.perf_counter()
     try:
         result = await asyncio.to_thread(request.app.state.locator.locate_bytes, contents)
-    except OSError as exc:  # PIL cannot decode the upload.
-        raise HTTPException(status_code=400, detail="Unreadable image") from exc
+    except UnsupportedImage as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     elapsed_ms = (time.perf_counter() - start) * 1000
     # No image hash or coordinates are logged, so logs cannot link a photo to a place.
     logger.info("predict latency_ms={:.2f}", elapsed_ms)
@@ -45,10 +46,12 @@ async def predict(request: Request, file: UploadFile = File(...)) -> PredictResp
         confidence_reasons=result.get("confidence_reasons", []),
         top_matches=[
             MatchResult(similarity_score=c["similarity"], inliers=c.get("inliers"),
-                        score=c.get("score"), **{
+                        score=c.get("score"), source=c.get("source"),
+                        capture_year=c.get("capture_year"), **{
                 k: c[k] for k in ("rank", "image_id", "lat", "lng", "creator", "source_url",
                                   "license_url")})
             for c in result["candidates"]
         ],
         processing_time_ms=elapsed_ms,
+        versions=request.app.state.locator.versions(),
     )

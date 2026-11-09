@@ -1,9 +1,14 @@
 .git
 .venv
+.venv-benchmark
+.uv-python
+.uv-cache
 **/__pycache__
 *.egg-info
 .env
+.env.*
 data
 qdrant_storage
-eval/photos
-eval/labels.csv
+eval
+tests
+web

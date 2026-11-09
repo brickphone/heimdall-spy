@@ -22,6 +22,7 @@ swespy/data/s2_grid.py
 swespy/model/__init__.py
 swespy/model/evaluate.py
 swespy/model/geo_head.py
+swespy/model/imageio.py
 swespy/model/locator.py
 swespy/model/megaloc.py
 swespy/model/rerank.py

@@ -15,13 +15,20 @@ from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
 from swespy.api.middleware import request_id_middleware
+from swespy.api.routes.field_photos import router as field_photos_router
 from swespy.api.routes.health import router as health_router
 from swespy.api.routes.predict import router as predict_router
+from swespy.api.routes.references import router as references_router
 from swespy.config import Settings, get_settings
 
 
 class DummyLocator:
     """Fast lightweight locator for tests; never loads model weights or an index."""
+
+    gallery = None
+
+    def versions(self) -> dict[str, Any]:
+        return {"model": {"name": "dummy"}, "gallery": {"file": None}, "rerank": {}}
 
     def locate_bytes(self, contents: bytes) -> dict[str, Any]:
         _ = contents
@@ -71,6 +78,7 @@ async def lifespan(app: FastAPI):
     app.state.top_k_results = settings.top_k_results
     app.state.allowed_image_types = set(settings.allowed_image_types)
     app.state.max_upload_size_mb = settings.max_upload_size_mb
+    app.state.field_photos_dir = settings.field_photos_dir
     yield
 
 
@@ -87,6 +95,7 @@ def create_app() -> FastAPI:
     app.state.top_k_results = settings.top_k_results
     app.state.allowed_image_types = set(settings.allowed_image_types)
     app.state.max_upload_size_mb = settings.max_upload_size_mb
+    app.state.field_photos_dir = settings.field_photos_dir
     if settings.testing:
         app.state.locator = DummyLocator()
 
@@ -96,6 +105,8 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(predict_router)
+    app.include_router(references_router)
+    app.include_router(field_photos_router)
 
     logger.remove()
     logger.add(sys.stderr, level=settings.log_level)
