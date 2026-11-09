@@ -30,6 +30,25 @@ This is an engineering audit, not legal advice. **Rule:** a component marked *No
 | kornia (LightGlue/DISK ports, RANSAC utilities) | Apache-2.0 | Yes | Allowed | [kornia/kornia](https://github.com/kornia/kornia) |
 | glue-factory | Apache-2.0 | Yes | Not needed (training framework) | [cvg/glue-factory](https://github.com/cvg/glue-factory) |
 
+### Upload decoding
+
+| Component | License | Commercial use | Decision | Source |
+| --- | --- | --- | --- | --- |
+| Pillow | MIT-CMU (HPND) | Yes | In use | [python-pillow/Pillow](https://github.com/python-pillow/Pillow) |
+| pillow-heif 1.8.1 (HEIC) | Source BSD-3; **binary wheels GPL-2.0** (bundled x265 encoder; libheif 1.23.6 and libde265 are LGPL-3.0) | Yes, but copyleft obligations if the wheel is distributed | **Optional extra `heic`**; installed locally for the demo, not in the default Docker image | [bigcat88/pillow_heif](https://github.com/bigcat88/pillow_heif) |
+| pi-heif 1.4.0 | LGPL-3.0 | — | **Rejected:** discontinued; bundles libheif 1.23.0 with a heap-overflow CVE on crafted HEIC | [pi-heif](https://pypi.org/project/pi-heif/) |
+
+### Demo web app (`swespy/web`)
+
+| Component | License | Commercial use | Decision | Source |
+| --- | --- | --- | --- | --- |
+| Next.js 16.4.5, React 19.3 | MIT | Yes | In use | [vercel/next.js](https://github.com/vercel/next.js) |
+| Tailwind CSS 4 | MIT | Yes | In use | [tailwindlabs/tailwindcss](https://github.com/tailwindlabs/tailwindcss) |
+| Leaflet 1.9.4 | BSD-2-Clause | Yes | In use (plain Leaflet) | [Leaflet/Leaflet](https://github.com/Leaflet/Leaflet) |
+| react-leaflet 5 | Hippocratic-2.1 (not OSI; use restrictions) | Unclear | **Rejected** | [PaulLeCam/react-leaflet](https://github.com/PaulLeCam/react-leaflet) |
+| Geist fonts (via `next/font`, self-hosted at build) | SIL OFL 1.1 | Yes | In use | [vercel/geist-font](https://github.com/vercel/geist-font) |
+| OpenStreetMap tiles | ODbL data; tile usage policy | Light use only | Demo only; attribution shown. Heavy or public use needs another tile provider | [OSM tile policy](https://operations.osmfoundation.org/policies/tiles/) |
+
 ### Privacy (face / licence-plate blurring for self-collected images)
 
 | Component | License | Commercial use | Decision | Source |
