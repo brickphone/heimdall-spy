@@ -16,6 +16,8 @@ class MatchResult(BaseModel):
     creator: str | None = None
     source_url: str | None = None
     license_url: str | None = None
+    inliers: int | None = None
+    score: float | None = None
 
     @field_validator("similarity_score", mode="before")
     @classmethod
@@ -34,5 +36,7 @@ class PredictResponse(BaseModel):
     prediction_method: str
     confidence: float = Field(ge=0.0, le=1.0)
     confidence_status: str
+    confidence_state: str = "unavailable"
+    confidence_reasons: list[str] = []
     top_matches: list[MatchResult]
     processing_time_ms: float

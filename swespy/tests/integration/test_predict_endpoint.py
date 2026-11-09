@@ -36,6 +36,8 @@ async def test_predict_endpoint_schema() -> None:
         "prediction_method",
         "confidence",
         "confidence_status",
+        "confidence_state",
+        "confidence_reasons",
         "top_matches",
         "processing_time_ms",
     }

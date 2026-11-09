@@ -97,3 +97,30 @@ def test_descriptor_cache_gallery_format(tmp_path: Path) -> None:
     manifest.write_text(manifest.read_text().replace('"h0"', '"tampered"'))
     with pytest.raises(ValueError, match="checksum"):
         loc.Gallery(manifest)
+
+
+def test_locator_reranks_with_geometric_verification(tmp_path: Path) -> None:
+    from io import BytesIO
+
+    from PIL import Image
+
+    class FakeVerifier:
+        def verify(self, image, references):
+            # Only the second-ranked reference ("centre") shows the same scene.
+            return [{"inliers": 120 if "h0" in str(path) or key == "h0" else 0, "matches": 150}
+                    for key, path in references]
+
+    manifest = gallery_files(tmp_path)
+    saved = json.loads(manifest.read_text())
+    for i, r in enumerate(saved["references_in_index_order"]):
+        r.update({"sha256": f"h{i}", "path": f"img{i}.jpg"})
+    manifest.write_text(json.dumps(saved))
+    locator = loc.GeoLocator(FakeEmbedder(), loc.Gallery(manifest), top_k=2, depth=2,
+                             verifier=FakeVerifier(), weight=0.5, min_inliers=15)
+    buf = BytesIO()
+    Image.new("RGB", (8, 8)).save(buf, format="PNG")
+    result = locator.locate_bytes(buf.getvalue())
+    assert [c["image_id"] for c in result["candidates"]] == ["centre", "ryd"]
+    assert result["candidates"][0]["inliers"] == 120
+    assert result["confidence_state"] == "ok"
+    assert (result["predicted_lat"], result["predicted_lng"]) == (58.4108, 15.6214)

@@ -29,6 +29,8 @@ class DummyLocator:
             "predicted_lat": 58.4108, "predicted_lng": 15.6214,
             "prediction_method": "top-ranked reference", "confidence": 0.9,
             "confidence_status": "dummy",
+            "confidence_state": "ok",
+            "confidence_reasons": [],
             "candidates": [
                 {"rank": i, "image_id": str(i), "lat": 58.4108, "lng": 15.6214,
                  "similarity": 0.9, "creator": None, "source_url": None, "license_url": None}
@@ -44,7 +46,14 @@ def build_locator(settings: Settings) -> Any:
 
     gallery = Gallery(Path(settings.gallery_index), settings.area_polygon)
     embedder = MegaLocEmbedder(Path(settings.megaloc_root), settings.megaloc_device)
-    return GeoLocator(embedder, gallery, settings.top_k_results, settings.retrieval_depth)
+    if not settings.rerank_enabled:
+        return GeoLocator(embedder, gallery, settings.top_k_results, settings.retrieval_depth)
+    from swespy.model import rerank as rr
+
+    verifier = rr.GeometricVerifier(settings.rerank_device)
+    return GeoLocator(embedder, gallery, settings.top_k_results, settings.retrieval_depth,
+                      verifier=verifier, weight=rr.DEFAULT_WEIGHT,
+                      min_inliers=rr.DEFAULT_MIN_INLIERS, rerank_k=settings.rerank_k)
 
 
 @asynccontextmanager

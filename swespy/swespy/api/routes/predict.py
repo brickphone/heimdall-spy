@@ -41,8 +41,11 @@ async def predict(request: Request, file: UploadFile = File(...)) -> PredictResp
         prediction_method=result["prediction_method"],
         confidence=result["confidence"],
         confidence_status=result["confidence_status"],
+        confidence_state=result.get("confidence_state", "unavailable"),
+        confidence_reasons=result.get("confidence_reasons", []),
         top_matches=[
-            MatchResult(similarity_score=c["similarity"], **{
+            MatchResult(similarity_score=c["similarity"], inliers=c.get("inliers"),
+                        score=c.get("score"), **{
                 k: c[k] for k in ("rank", "image_id", "lat", "lng", "creator", "source_url",
                                   "license_url")})
             for c in result["candidates"]

@@ -14,6 +14,31 @@ LINKOPING_AREA: tuple[tuple[float, float], ...] = (
 )
 
 
+def _segments_intersect(p1, p2, q1, q2) -> bool:  # type: ignore[no-untyped-def]
+    def orient(a, b, c):  # type: ignore[no-untyped-def]
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+    d1, d2 = orient(q1, q2, p1), orient(q1, q2, p2)
+    d3, d4 = orient(p1, p2, q1), orient(p1, p2, q2)
+    return d1 * d2 < 0 and d3 * d4 < 0
+
+
+def polygons_overlap(a: tuple[tuple[float, float], ...], b: tuple[tuple[float, float], ...]
+                     ) -> bool:
+    """True if two simple polygons share any area (vertex inside, or crossing edges)."""
+    if any(in_area(x, y, b) for x, y in a) or any(in_area(x, y, a) for x, y in b):
+        return True
+    ea = list(zip(a, a[1:] + a[:1], strict=True))
+    eb = list(zip(b, b[1:] + b[:1], strict=True))
+    return any(_segments_intersect(p1, p2, q1, q2) for p1, p2 in ea for q1, q2 in eb)
+
+
+# Frozen majority-location baseline (decision 2026-11-08): the city-centre location from
+# baseline_v2 (mean of the most populated 1 km UTM cell [536, 6474] of the original
+# 2,489-reference gallery). Fixed so the baseline never moves with gallery composition.
+MAJORITY_BASELINE_LATLNG: tuple[float, float] = (58.410117221872895, 15.626609382633434)
+
+
 def in_area(lng: float, lat: float, polygon: tuple[tuple[float, float], ...] = LINKOPING_AREA
             ) -> bool:
     """Even-odd ray-casting test; points exactly on an edge may fall either way."""
@@ -31,10 +56,13 @@ class Settings(BaseSettings):
     # MegaLoc assets/descriptor cache and the exported gallery index used for inference.
     megaloc_root: str = "data/megaloc"
     megaloc_device: str = "auto"
-    gallery_index: str = (
-        "data/benchmarks/runs/linkoping_city-20261106T130343.492589Z/gallery-index.json"
-    )
+    # Default gallery (decision 2026-11-08): gallery v2 "historic", 91,714 references.
+    gallery_index: str = "data/gallery_v2/gallery-index-historic.json"
     retrieval_depth: int = 50
+    # Geometric re-ranking (Part 5); weight/threshold tuned on the dev set only.
+    rerank_enabled: bool = True
+    rerank_k: int = 5  # Candidates verified (sweep 2026-11-09: K=5 matches K=50 on dev, 4 s).
+    rerank_device: str = "auto"  # ALIKED device; LightGlue runs on CPU when this is MPS.
     s2_cell_level: int = 14
     # Central Linkoping pilot, not the full city or municipal boundary.
     sweden_bbox: tuple[float, float, float, float] = (15.58, 58.39, 15.66, 58.43)
@@ -67,3 +95,10 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Return a cached settings object."""
     return Settings()
+
+
+from swespy.cities import TRAINING_CITIES  # noqa: E402
+
+for _name, _city in TRAINING_CITIES.items():
+    if polygons_overlap(_city["polygon"], LINKOPING_AREA):  # type: ignore[arg-type]
+        raise ValueError(f"Training city {_name} overlaps the Linköping evaluation polygon")

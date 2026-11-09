@@ -19,13 +19,14 @@ This is an engineering audit, not legal advice. **Rule:** a component marked *No
 
 | Component | License | Commercial use | Decision | Source |
 | --- | --- | --- | --- | --- |
-| **LightGlue** code and weights (ALIKED/DISK variants) | Apache-2.0 | Yes | **Default matcher** | [cvg/LightGlue](https://github.com/cvg/LightGlue) — README: "pre-trained weights of LightGlue and the code ... are released under the Apache-2.0 license" |
+| **LightGlue** code and weights (ALIKED/DISK variants) | Apache-2.0 | Yes | **Default matcher** (commit `5a650c4`; the package also ships `superpoint.py`, which is never imported) | [cvg/LightGlue](https://github.com/cvg/LightGlue) — README: "pre-trained weights of LightGlue and the code ... are released under the Apache-2.0 license" |
 | **ALIKED** code and weights | BSD-3-Clause | Yes | **Default extractor** | [Shiaoming/ALIKED](https://github.com/Shiaoming/ALIKED) |
 | DISK code and weights | Apache-2.0 | Yes | Allowed alternative | [cvlab-epfl/disk](https://github.com/cvlab-epfl/disk) |
 | SuperPoint (original Magic Leap weights and `superpoint.py` inference file in LightGlue) | Magic Leap academic/non-profit non-commercial licence | **No** | **Excluded** | [magicleap/SuperPointPretrainedNetwork](https://github.com/magicleap/SuperPointPretrainedNetwork/blob/master/LICENSE) |
 | SuperPoint + LightGlue weights | Inherit SuperPoint restriction | **No** | **Excluded** | LightGlue README (above) |
 | XFeat | Apache-2.0 | Yes | Allowed alternative | [verlab/accelerated_features](https://github.com/verlab/accelerated_features) |
 | SIFT (OpenCV) | Apache-2.0; SIFT patent expired 2020 | Yes | Allowed fallback | [opencv/opencv](https://github.com/opencv/opencv/blob/4.x/LICENSE) |
+| OpenCV 4.10 (USAC-MAGSAC RANSAC used for inlier counting) | Apache-2.0 | Yes | **In use** | [opencv/opencv](https://github.com/opencv/opencv/blob/4.x/LICENSE) |
 | kornia (LightGlue/DISK ports, RANSAC utilities) | Apache-2.0 | Yes | Allowed | [kornia/kornia](https://github.com/kornia/kornia) |
 | glue-factory | Apache-2.0 | Yes | Not needed (training framework) | [cvg/glue-factory](https://github.com/cvg/glue-factory) |
 

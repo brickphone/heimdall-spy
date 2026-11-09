@@ -65,6 +65,7 @@ class Gallery:
         self.refs: list[dict[str, Any]] = [refs[i] for i in keep]
         self.excluded_outside_area = len(refs) - len(keep)
         self.identity: dict[str, Any] = saved["model_identity"]
+        self.root = manifest_path.parent  # Reference image paths are relative to this.
         self.index_sha256: str = saved["index_sha256"]
 
     def search(self, vectors: np.ndarray, depth: int) -> tuple[np.ndarray, np.ndarray]:
@@ -81,12 +82,18 @@ class Gallery:
 class GeoLocator:
     """Rank gallery references for a query and report the top candidates."""
 
-    def __init__(self, embedder: Any, gallery: Gallery, top_k: int = 5, depth: int = 50) -> None:
+    def __init__(self, embedder: Any, gallery: Gallery, top_k: int = 5, depth: int = 50,
+                 verifier: Any = None, weight: float = 0.0, min_inliers: int = 0,
+                 rerank_k: int | None = None) -> None:
+        """``verifier`` (swespy.model.rerank.GeometricVerifier) enables re-ranking of the
+        top ``depth`` candidates; ``weight``/``min_inliers`` come from dev-set tuning."""
         if not same_descriptor_space(embedder.identity, gallery.identity):
             raise ValueError("Query encoder and gallery were built with different MegaLoc assets")
         if not 1 <= top_k <= depth:
             raise ValueError("top_k must be between 1 and the retrieval depth")
         self.embedder, self.gallery, self.top_k, self.depth = embedder, gallery, top_k, depth
+        self.verifier, self.weight, self.min_inliers = verifier, weight, min_inliers
+        self.rerank_k = min(rerank_k or depth, depth)
 
     def locate_vector(self, vector: np.ndarray) -> dict[str, Any]:
         indices, similarities = self.gallery.search(vector, self.depth)
@@ -109,5 +116,43 @@ class GeoLocator:
         }
 
     def locate_bytes(self, contents: bytes) -> dict[str, Any]:
-        """Locate an uploaded image held only in memory."""
-        return self.locate_vector(self.embedder.embed_bytes(contents))
+        """Locate an uploaded image held only in memory (re-ranked if a verifier is set)."""
+        result = self.locate_vector(self.embedder.embed_bytes(contents))
+        if self.verifier is None:
+            return result
+        from io import BytesIO
+
+        from PIL import Image
+
+        with Image.open(BytesIO(contents)) as im:
+            image = im.convert("RGB")
+        return self.rerank_result(result, image)
+
+    def rerank_result(self, result: dict[str, Any], image: Any) -> dict[str, Any]:
+        """Geometric verification of the top ``depth`` candidates, then shared finalize."""
+        from swespy.model import rerank as rr
+
+        refs = self.gallery.refs
+        k = self.rerank_k
+        order, sims = result["ranked_indices"][:k], result["ranked_similarities"][:k]
+        checks = self.verifier.verify(
+            image, [(refs[i]["sha256"], self.gallery.root / refs[i]["path"]) for i in order])
+        candidates = [{"index": i, "similarity": s, "inliers": c["inliers"],
+                       **{k: refs[i].get(k) for k in REFERENCE_FIELDS}}
+                      for i, s, c in zip(order, sims, checks, strict=True)]
+        f = rr.finalize(candidates, self.weight, self.min_inliers, self.top_k)
+        return {
+            "predicted_lat": f["predicted_lat"],
+            "predicted_lng": f["predicted_lng"],
+            "prediction_method": "geometric re-ranking (ALIKED+LightGlue, RANSAC inliers); "
+                                 "score-weighted mean of top candidates within 100 m",
+            "confidence": float(np.clip(f["top"][0]["score"], 0, 1)),
+            "confidence_status": "re-ranked score; see confidence_state",
+            "confidence_state": f["confidence"]["state"],
+            "confidence_reasons": f["confidence"]["reasons"],
+            "candidates": [{"rank": r, **c} for r, c in enumerate(f["top"], 1)],
+            # Verified candidates in re-ranked order, then the unverified rest of the depth.
+            "ranked_indices": [c["index"] for c in f["ranked"]] + result["ranked_indices"][k:],
+            "ranked_similarities": [c["similarity"] for c in f["ranked"]]
+            + result["ranked_similarities"][k:],
+        }
