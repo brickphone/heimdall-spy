@@ -167,7 +167,13 @@ def majority_location(refs: list[dict[str, Any]], cell_m: int = 1000) -> dict[st
     """The mean position of the most populated gallery cell; uses no evaluation labels."""
     cells: dict[tuple[int, int], list[dict[str, Any]]] = {}
     for r in refs:
-        cells.setdefault((int(r["easting"] // cell_m), int(r["northing"] // cell_m)), []).append(r)
+        if "easting" in r:
+            easting, northing = r["easting"], r["northing"]
+        else:  # Gallery v2 rows: same UTM zone (33) as the v1 rows' stored coordinates.
+            import utm
+
+            easting, northing = utm.from_latlon(r["lat"], r["lng"], force_zone_number=33)[:2]
+        cells.setdefault((int(easting // cell_m), int(northing // cell_m)), []).append(r)
     key, members = max(cells.items(), key=lambda kv: (len(kv[1]), kv[0]))
     return {"lat": statistics.fmean(r["lat"] for r in members),
             "lng": statistics.fmean(r["lng"] for r in members),

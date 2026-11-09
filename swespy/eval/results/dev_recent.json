@@ -1,0 +1,4675 @@
+{
+  "label": "dev_recent",
+  "created_at": "2026-11-08T12:25:48.337121+00:00",
+  "definitions": {
+    "prediction": "Location of the top-ranked reference",
+    "failure_type": "no_coverage: no reference within 100 m; success: top-1 within 100 m; ranking: covered and within top 50; retrieval: covered, not in top 50",
+    "ci95": "Wilson score interval",
+    "majority_location": "Fixed city-centre coordinate MAJORITY_BASELINE_LATLNG (mean of the most populated 1 km cell of the original gallery); independent of the evaluated gallery",
+    "random_reference": "Exact expectation of predicting a uniformly random reference",
+    "reranking_ceiling": "Share with a reference within 100 m in the top 50; geometric verification cannot recover matches beyond the same scene"
+  },
+  "reference_count": 32600,
+  "metrics": {
+    "query_count": 66,
+    "median_error_m": 1341.0296818812708,
+    "within": {
+      "25m": {
+        "count": 6,
+        "n": 66,
+        "rate": 0.09090909090909091,
+        "ci95": [
+          0.04233297482305079,
+          0.1844872997680123
+        ]
+      },
+      "100m": {
+        "count": 15,
+        "n": 66,
+        "rate": 0.22727272727272727,
+        "ci95": [
+          0.14285229509940353,
+          0.3416945546279718
+        ]
+      },
+      "500m": {
+        "count": 23,
+        "n": 66,
+        "rate": 0.3484848484848485,
+        "ci95": [
+          0.2447587399036189,
+          0.46887839883381194
+        ]
+      },
+      "2000m": {
+        "count": 36,
+        "n": 66,
+        "rate": 0.5454545454545454,
+        "ci95": [
+          0.42615011252555934,
+          0.6597587458532113
+        ]
+      }
+    },
+    "coverage": {
+      "25m": {
+        "count": 22,
+        "n": 66,
+        "rate": 0.3333333333333333,
+        "ci95": [
+          0.2315642905191201,
+          0.45343656209205363
+        ]
+      },
+      "100m": {
+        "count": 50,
+        "n": 66,
+        "rate": 0.7575757575757576,
+        "ci95": [
+          0.6419087130039742,
+          0.8449081511423935
+        ]
+      },
+      "500m": {
+        "count": 63,
+        "n": 66,
+        "rate": 0.9545454545454546,
+        "ci95": [
+          0.8746668580009003,
+          0.9844217257868075
+        ]
+      },
+      "50m": {
+        "count": 33,
+        "n": 66,
+        "rate": 0.5,
+        "ci95": [
+          0.38273687937641954,
+          0.6172631206235805
+        ]
+      }
+    },
+    "true_in_top_k": {
+      "100m": {
+        "1": {
+          "count": 15,
+          "n": 66,
+          "rate": 0.22727272727272727,
+          "ci95": [
+            0.14285229509940353,
+            0.3416945546279718
+          ]
+        },
+        "5": {
+          "count": 17,
+          "n": 66,
+          "rate": 0.25757575757575757,
+          "ci95": [
+            0.16748843553330722,
+            0.37433098644658197
+          ]
+        },
+        "20": {
+          "count": 18,
+          "n": 66,
+          "rate": 0.2727272727272727,
+          "ci95": [
+            0.1800334493470519,
+            0.3904222587590942
+          ]
+        },
+        "50": {
+          "count": 22,
+          "n": 66,
+          "rate": 0.3333333333333333,
+          "ci95": [
+            0.2315642905191201,
+            0.45343656209205363
+          ]
+        }
+      },
+      "500m": {
+        "1": {
+          "count": 23,
+          "n": 66,
+          "rate": 0.3484848484848485,
+          "ci95": [
+            0.2447587399036189,
+            0.46887839883381194
+          ]
+        },
+        "5": {
+          "count": 31,
+          "n": 66,
+          "rate": 0.4696969696969697,
+          "ci95": [
+            0.3543042841158845,
+            0.5884231436316016
+          ]
+        },
+        "20": {
+          "count": 40,
+          "n": 66,
+          "rate": 0.6060606060606061,
+          "ci95": [
+            0.4854840070594543,
+            0.7149699958243442
+          ]
+        },
+        "50": {
+          "count": 48,
+          "n": 66,
+          "rate": 0.7272727272727273,
+          "ci95": [
+            0.6095777412409058,
+            0.8199665506529481
+          ]
+        }
+      }
+    },
+    "failure_type": {
+      "success": {
+        "count": 15,
+        "n": 66,
+        "rate": 0.22727272727272727,
+        "ci95": [
+          0.14285229509940353,
+          0.3416945546279718
+        ]
+      },
+      "ranking": {
+        "count": 7,
+        "n": 66,
+        "rate": 0.10606060606060606,
+        "ci95": [
+          0.05233347226940638,
+          0.2031230884479136
+        ]
+      },
+      "retrieval": {
+        "count": 28,
+        "n": 66,
+        "rate": 0.42424242424242425,
+        "ci95": [
+          0.3124251006818743,
+          0.544393468686841
+        ]
+      },
+      "no_coverage": {
+        "count": 16,
+        "n": 66,
+        "rate": 0.24242424242424243,
+        "ci95": [
+          0.15509184885760655,
+          0.3580912869960259
+        ]
+      }
+    },
+    "reranking_ceiling_top50_at_100m": {
+      "count": 22,
+      "n": 66,
+      "rate": 0.3333333333333333,
+      "ci95": [
+        0.2315642905191201,
+        0.45343656209205363
+      ]
+    }
+  },
+  "target": {
+    "criterion": ">= 40% within 500 m AND system 95% CI does not overlap and lies above the majority-location baseline CI",
+    "system_within_500m": {
+      "count": 23,
+      "n": 66,
+      "rate": 0.3484848484848485,
+      "ci95": [
+        0.2447587399036189,
+        0.46887839883381194
+      ]
+    },
+    "majority_within_500m": {
+      "count": 15,
+      "n": 66,
+      "rate": 0.22727272727272727,
+      "ci95": [
+        0.14285229509940353,
+        0.3416945546279718
+      ]
+    },
+    "a_rate_at_least_40pct": false,
+    "b_ci_above_majority": false,
+    "met": false
+  },
+  "baselines": {
+    "majority_location": {
+      "median_error_m": 1043.3398555524432,
+      "within": {
+        "25m": {
+          "count": 1,
+          "n": 66,
+          "rate": 0.015151515151515152,
+          "ci95": [
+            0.002679640514358664,
+            0.08095920344541979
+          ]
+        },
+        "100m": {
+          "count": 1,
+          "n": 66,
+          "rate": 0.015151515151515152,
+          "ci95": [
+            0.002679640514358664,
+            0.08095920344541979
+          ]
+        },
+        "500m": {
+          "count": 15,
+          "n": 66,
+          "rate": 0.22727272727272727,
+          "ci95": [
+            0.14285229509940353,
+            0.3416945546279718
+          ]
+        },
+        "2000m": {
+          "count": 36,
+          "n": 66,
+          "rate": 0.5454545454545454,
+          "ci95": [
+            0.42615011252555934,
+            0.6597587458532113
+          ]
+        }
+      },
+      "location": {
+        "lat": 58.410117221872895,
+        "lng": 15.626609382633434,
+        "source": "fixed city-centre coordinate (config)"
+      }
+    },
+    "random_reference": {
+      "median_error_m": 3581.4786135851164,
+      "within": {
+        "25m": {
+          "count": 0.0027607361963190185,
+          "n": 66,
+          "rate": 4.182933630786392e-05,
+          "ci95": [
+            3.0018303998763374e-08,
+            0.05508158504685444
+          ]
+        },
+        "100m": {
+          "count": 0.03570552147239264,
+          "n": 66,
+          "rate": 0.0005409927495817067,
+          "ci95": [
+            4.93707457073847e-06,
+            0.05602009428812145
+          ]
+        },
+        "500m": {
+          "count": 1.0781288343558284,
+          "n": 66,
+          "rate": 0.016335285369027702,
+          "ci95": [
+            0.003044294209662436,
+            0.08283186940544046
+          ]
+        },
+        "2000m": {
+          "count": 12.048834355828218,
+          "n": 66,
+          "rate": 0.18255809630042755,
+          "ci95": [
+            0.10775271313781795,
+            0.292283712797075
+          ]
+        }
+      },
+      "note": "Exact expectation over all references; count is fractional"
+    }
+  },
+  "robustness": {
+    "photographer_balanced_within_500m": {
+      "system": {
+        "rate": 0.6222222222222222,
+        "photographer_count": 15,
+        "ci95": [
+          0.3977777777777778,
+          0.8333333333333334
+        ],
+        "ci_method": "photographer bootstrap, 10000 resamples, seed 0"
+      },
+      "majority_location": {
+        "rate": 0.3988888888888889,
+        "photographer_count": 15,
+        "ci95": [
+          0.18000000000000002,
+          0.6322222222222221
+        ],
+        "ci_method": "photographer bootstrap, 10000 resamples, seed 0"
+      }
+    },
+    "excluding_top3_photographers": {
+      "excluded_photographers": [
+        "Stockholm100",
+        "Lundgren8",
+        "Bene Riobó"
+      ],
+      "query_count": 25,
+      "system_within": {
+        "25m": {
+          "count": 5,
+          "n": 25,
+          "rate": 0.2,
+          "ci95": [
+            0.08860584630746873,
+            0.39130950534876585
+          ]
+        },
+        "100m": {
+          "count": 10,
+          "n": 25,
+          "rate": 0.4,
+          "ci95": [
+            0.2340330227270205,
+            0.5926054278250577
+          ]
+        },
+        "500m": {
+          "count": 15,
+          "n": 25,
+          "rate": 0.6,
+          "ci95": [
+            0.40739457217494224,
+            0.7659669772729795
+          ]
+        },
+        "2000m": {
+          "count": 18,
+          "n": 25,
+          "rate": 0.72,
+          "ci95": [
+            0.5242339465222645,
+            0.8571614622631634
+          ]
+        }
+      },
+      "majority_within": {
+        "25m": {
+          "count": 1,
+          "n": 25,
+          "rate": 0.04,
+          "ci95": [
+            0.007096233423382073,
+            0.1954406391161776
+          ]
+        },
+        "100m": {
+          "count": 1,
+          "n": 25,
+          "rate": 0.04,
+          "ci95": [
+            0.007096233423382073,
+            0.1954406391161776
+          ]
+        },
+        "500m": {
+          "count": 11,
+          "n": 25,
+          "rate": 0.44,
+          "ci95": [
+            0.26665638767770883,
+            0.629326682653538
+          ]
+        },
+        "2000m": {
+          "count": 19,
+          "n": 25,
+          "rate": 0.76,
+          "ci95": [
+            0.5657031648291211,
+            0.8850368637354755
+          ]
+        }
+      },
+      "failure_type": {
+        "success": 10,
+        "ranking": 2,
+        "retrieval": 10,
+        "no_coverage": 3
+      }
+    },
+    "note": "Diagnostics only; the development set itself is not reweighted or filtered"
+  },
+  "dev_set_distribution": {
+    "photo_count": 66,
+    "photographer_count": 15,
+    "photos_per_photographer": {
+      "Stockholm100": 15,
+      "Lundgren8": 14,
+      "Bene Riobó": 12,
+      "Napakaira": 5,
+      "LA2": 4,
+      "Katlinke": 3,
+      "Arkland": 2,
+      "AleWi": 2,
+      "Hans G. Oberlack": 2,
+      "Herranderssvensson": 2,
+      "Paint the light": 1,
+      "Mr.inky61": 1,
+      "Jojoo64": 1,
+      "OJH": 1,
+      "Osthyveln från Österrike": 1
+    },
+    "largest_photographer_share": 0.22727272727272727,
+    "top3_photographer_share": 0.6212121212121212,
+    "effective_photographers": 6.849056603773585,
+    "densest_point": {
+      "lat": 58.411381,
+      "lng": 15.619153,
+      "image_id": "commons-185016341"
+    },
+    "share_within_1000m_of_densest_point": 0.5151515151515151,
+    "median_distance_to_densest_point_m": 904.4650703439484,
+    "clustering_threshold_share": 0.25,
+    "clustered": true,
+    "flags": [
+      "photographer_concentration: three photographers took 41/66",
+      "spatial_clustering: 34/66 photos within 1000 m of one point"
+    ]
+  },
+  "provenance": {
+    "dev_manifest_sha256": "8a5f0fb1eef08dc817a54e600841bec59935c10a4ea629bed27ddc8ba16ea759",
+    "index_sha256": "849335e70165b1412483bfcfb594912f160dda42bb07cea63b6c37a1a04bc00e",
+    "gallery_filter": {
+      "polygon_lnglat": [
+        [
+          15.495,
+          58.392
+        ],
+        [
+          15.495,
+          58.428
+        ],
+        [
+          15.535,
+          58.47
+        ],
+        [
+          15.595,
+          58.472
+        ],
+        [
+          15.64,
+          58.452
+        ],
+        [
+          15.7,
+          58.44
+        ],
+        [
+          15.745,
+          58.412
+        ],
+        [
+          15.758,
+          58.372
+        ],
+        [
+          15.722,
+          58.35
+        ],
+        [
+          15.64,
+          58.352
+        ],
+        [
+          15.555,
+          58.352
+        ],
+        [
+          15.515,
+          58.372
+        ]
+      ],
+      "references_in_saved_index": 32600,
+      "excluded_outside_polygon": 0,
+      "references_used": 32600
+    },
+    "model_identity": {
+      "source_repository": "https://github.com/gmberton/MegaLoc",
+      "source_revision": "5fe0dd697c4a70ba3e23607f6716ab3c606b16db",
+      "source_sha256": "e3a66ae823abbbbc5e7975c649419a33036400eaa9fa5a955dd97eaa37f46c75",
+      "weights_repository": "https://huggingface.co/gberton/MegaLoc",
+      "weights_revision": "a0f34722c4297ff787e022433799250180860af7",
+      "weights_sha256": "d4f9f2bcb60018f91eb6a8e061ed054fd55654e10c2569cf13841ea986ffb4f8",
+      "source_license_sha256": "0a906f9a65db6f645483f6cbf56b01e20615b9b943df3f70112f3d0fe0521e2a",
+      "weights_license_sha256": "0a906f9a65db6f645483f6cbf56b01e20615b9b943df3f70112f3d0fe0521e2a",
+      "preprocessing": {
+        "rgb": true,
+        "to_tensor": true,
+        "mean": [
+          0.485,
+          0.456,
+          0.406
+        ],
+        "std": [
+          0.229,
+          0.224,
+          0.225
+        ],
+        "resize_after_normalization": [
+          322,
+          322
+        ],
+        "antialias": true,
+        "resize_interpolation": "bilinear",
+        "dtype": "float32",
+        "augmentation": "none",
+        "whitening_or_pca": "none"
+      },
+      "device": "mps",
+      "torch": "2.5.1",
+      "torchvision": "0.20.1",
+      "python": "3.12.8",
+      "platform": "macOS-26.2-arm64-arm-64bit",
+      "mps_cpu_fallback_enabled": true,
+      "conv_input_layout": "contiguous"
+    }
+  },
+  "queries": [
+    {
+      "image_id": "commons-192964955",
+      "creator": "Stockholm100",
+      "capture_date": "2026-05-28",
+      "lat": 58.412881,
+      "lng": 15.615314,
+      "error_m": 2678.6355266545365,
+      "nearest_reference_m": 12.62565764229735,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 46
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.12700212001800537,
+      "top5": [
+        {
+          "image_id": "commons-194869768",
+          "lat": 58.398906,
+          "lng": 15.577861,
+          "similarity": 0.12700212001800537
+        },
+        {
+          "image_id": "commons-29166087",
+          "lat": 58.401389,
+          "lng": 15.597778,
+          "similarity": 0.1216895580291748
+        },
+        {
+          "image_id": "commons-29166086",
+          "lat": 58.401111,
+          "lng": 15.597778,
+          "similarity": 0.11260318756103516
+        },
+        {
+          "image_id": "commons-128349124",
+          "lat": 58.405762,
+          "lng": 15.590305,
+          "similarity": 0.10596263408660889
+        },
+        {
+          "image_id": "mapillary-793563724635223",
+          "lat": 58.407246487291,
+          "lng": 15.581233898136,
+          "similarity": 0.10549253225326538
+        }
+      ]
+    },
+    {
+      "image_id": "commons-177421327",
+      "creator": "Lundgren8",
+      "capture_date": "2025-10-23",
+      "lat": 58.416411,
+      "lng": 15.591522,
+      "error_m": 3917.067826832358,
+      "nearest_reference_m": 182.56207730386802,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": null
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "no_coverage",
+      "confidence": 0.16094303131103516,
+      "top5": [
+        {
+          "image_id": "mapillary-505009743868176",
+          "lat": 58.385093801413,
+          "lng": 15.560738049045,
+          "similarity": 0.16094303131103516
+        },
+        {
+          "image_id": "mapillary-1115229878959980",
+          "lat": 58.38381992974,
+          "lng": 15.559053219767,
+          "similarity": 0.1603102684020996
+        },
+        {
+          "image_id": "commons-73958789",
+          "lat": 58.406002,
+          "lng": 15.589682,
+          "similarity": 0.15656936168670654
+        },
+        {
+          "image_id": "mapillary-178341930853796",
+          "lat": 58.383814997648,
+          "lng": 15.559100311541,
+          "similarity": 0.15584957599639893
+        },
+        {
+          "image_id": "mapillary-4196398537089857",
+          "lat": 58.385078583474,
+          "lng": 15.56072829662,
+          "similarity": 0.1464996337890625
+        }
+      ]
+    },
+    {
+      "image_id": "commons-192964994",
+      "creator": "Stockholm100",
+      "capture_date": "2026-05-28",
+      "lat": 58.413981,
+      "lng": 15.616483,
+      "error_m": 6285.885624233783,
+      "nearest_reference_m": 1.608017508843741,
+      "rank_of_first_within_m": {
+        "100": 4,
+        "500": 4
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": true,
+          "20": true,
+          "50": true
+        },
+        "500m": {
+          "1": false,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": true,
+      "failure_type": "ranking",
+      "confidence": 0.1885991096496582,
+      "top5": [
+        {
+          "image_id": "commons-82010386",
+          "lat": 58.365093,
+          "lng": 15.56233,
+          "similarity": 0.1885991096496582
+        },
+        {
+          "image_id": "mapillary-297156328610142",
+          "lat": 58.394671277146,
+          "lng": 15.547543024519,
+          "similarity": 0.13801008462905884
+        },
+        {
+          "image_id": "commons-194869777",
+          "lat": 58.399003,
+          "lng": 15.577825,
+          "similarity": 0.13541990518569946
+        },
+        {
+          "image_id": "commons-7689229",
+          "lat": 58.41356,
+          "lng": 15.616491,
+          "similarity": 0.13390851020812988
+        },
+        {
+          "image_id": "commons-196316626",
+          "lat": 58.400708,
+          "lng": 15.577686,
+          "similarity": 0.13225173950195312
+        }
+      ]
+    },
+    {
+      "image_id": "commons-198610983",
+      "creator": "Arkland",
+      "capture_date": "2025-09-24",
+      "lat": 58.400575,
+      "lng": 15.646786,
+      "error_m": 1525.610038045341,
+      "nearest_reference_m": 129.77301448405814,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 30
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "no_coverage",
+      "confidence": 0.13526642322540283,
+      "top5": [
+        {
+          "image_id": "commons-23005637",
+          "lat": 58.411776,
+          "lng": 15.631662,
+          "similarity": 0.13526642322540283
+        },
+        {
+          "image_id": "commons-105182449",
+          "lat": 58.360833,
+          "lng": 15.6055,
+          "similarity": 0.1293284296989441
+        },
+        {
+          "image_id": "commons-134751672",
+          "lat": 58.395235,
+          "lng": 15.678863,
+          "similarity": 0.11134070158004761
+        },
+        {
+          "image_id": "mapillary-804132640210925-crop5",
+          "lat": 58.415672277387,
+          "lng": 15.632466654934,
+          "similarity": 0.10847514867782593
+        },
+        {
+          "image_id": "mapillary-863451172148917",
+          "lat": 58.420542016328,
+          "lng": 15.579272926292,
+          "similarity": 0.10797429084777832
+        }
+      ]
+    },
+    {
+      "image_id": "commons-177699578",
+      "creator": "Lundgren8",
+      "capture_date": "2025-11-01",
+      "lat": 58.424611,
+      "lng": 15.589806,
+      "error_m": 2809.0943708914233,
+      "nearest_reference_m": 67.36037841412929,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": null
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.12175112962722778,
+      "top5": [
+        {
+          "image_id": "commons-78344972",
+          "lat": 58.401863,
+          "lng": 15.610784,
+          "similarity": 0.12175112962722778
+        },
+        {
+          "image_id": "mapillary-476743250200388-crop5",
+          "lat": 58.412976911502,
+          "lng": 15.615197972895,
+          "similarity": 0.11633467674255371
+        },
+        {
+          "image_id": "commons-2019289",
+          "lat": 58.411648,
+          "lng": 15.615942,
+          "similarity": 0.11598515510559082
+        },
+        {
+          "image_id": "commons-2028945",
+          "lat": 58.413333,
+          "lng": 15.630556,
+          "similarity": 0.11472731828689575
+        },
+        {
+          "image_id": "mapillary-924674525001112",
+          "lat": 58.406060553783,
+          "lng": 15.590366061781,
+          "similarity": 0.11346250772476196
+        }
+      ]
+    },
+    {
+      "image_id": "commons-200557934",
+      "creator": "Bene Riobó",
+      "capture_date": "2026-08-21",
+      "lat": 58.409407,
+      "lng": 15.620001,
+      "error_m": 115.19359746041091,
+      "nearest_reference_m": 65.7561484964036,
+      "rank_of_first_within_m": {
+        "100": 13,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": true,
+          "50": true
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": true,
+      "failure_type": "ranking",
+      "confidence": 0.14225095510482788,
+      "top5": [
+        {
+          "image_id": "mapillary-777803629588788",
+          "lat": 58.41024282282,
+          "lng": 15.618832592921,
+          "similarity": 0.14225095510482788
+        },
+        {
+          "image_id": "mapillary-1231571477292305",
+          "lat": 58.410210299436,
+          "lng": 15.618604311433,
+          "similarity": 0.13336390256881714
+        },
+        {
+          "image_id": "mapillary-1025831891288691",
+          "lat": 58.407432551204,
+          "lng": 15.625780007175,
+          "similarity": 0.1259840726852417
+        },
+        {
+          "image_id": "mapillary-305427997868537",
+          "lat": 58.410155593414,
+          "lng": 15.618218965393,
+          "similarity": 0.11962366104125977
+        },
+        {
+          "image_id": "mapillary-3825896127508307",
+          "lat": 58.413145762276,
+          "lng": 15.613249669643,
+          "similarity": 0.1187819242477417
+        }
+      ]
+    },
+    {
+      "image_id": "commons-195526503",
+      "creator": "Paint the light",
+      "capture_date": "2023-11-21",
+      "lat": 58.410278,
+      "lng": 15.621111,
+      "error_m": 51.000504616233336,
+      "nearest_reference_m": 0.0,
+      "rank_of_first_within_m": {
+        "100": 1,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": true,
+      "failure_type": "success",
+      "confidence": 0.3841060400009155,
+      "top5": [
+        {
+          "image_id": "commons-233250",
+          "lat": 58.410686,
+          "lng": 15.621511,
+          "similarity": 0.3841060400009155
+        },
+        {
+          "image_id": "commons-2019814",
+          "lat": 58.410503,
+          "lng": 15.620445,
+          "similarity": 0.21020954847335815
+        },
+        {
+          "image_id": "commons-7689133",
+          "lat": 58.414642,
+          "lng": 15.623446,
+          "similarity": 0.14130663871765137
+        },
+        {
+          "image_id": "mapillary-929696561215028",
+          "lat": 58.410584589334,
+          "lng": 15.621108913218,
+          "similarity": 0.10549426078796387
+        },
+        {
+          "image_id": "commons-195526496",
+          "lat": 58.410278,
+          "lng": 15.621111,
+          "similarity": 0.0987042784690857
+        }
+      ]
+    },
+    {
+      "image_id": "commons-177699577",
+      "creator": "Lundgren8",
+      "capture_date": "2025-11-01",
+      "lat": 58.426289,
+      "lng": 15.586836,
+      "error_m": 2361.7645634944975,
+      "nearest_reference_m": 131.34363160023932,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 26
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "no_coverage",
+      "confidence": 0.16568809747695923,
+      "top5": [
+        {
+          "image_id": "mapillary-1476858887130508",
+          "lat": 58.406219824369,
+          "lng": 15.600113704376,
+          "similarity": 0.16568809747695923
+        },
+        {
+          "image_id": "mapillary-1839866666193795",
+          "lat": 58.392357172844,
+          "lng": 15.558501457639,
+          "similarity": 0.15522277355194092
+        },
+        {
+          "image_id": "mapillary-3773087916152530",
+          "lat": 58.406617404445,
+          "lng": 15.58981888248,
+          "similarity": 0.1507365107536316
+        },
+        {
+          "image_id": "mapillary-922054793964980",
+          "lat": 58.406290449882,
+          "lng": 15.600037444676,
+          "similarity": 0.13657093048095703
+        },
+        {
+          "image_id": "mapillary-1453764736189238",
+          "lat": 58.406161017547,
+          "lng": 15.600254012685,
+          "similarity": 0.12943410873413086
+        }
+      ]
+    },
+    {
+      "image_id": "commons-199908377",
+      "creator": "Bene Riobó",
+      "capture_date": "2026-08-22",
+      "lat": 58.416033,
+      "lng": 15.622928,
+      "error_m": 631.6848151552734,
+      "nearest_reference_m": 18.542014985506242,
+      "rank_of_first_within_m": {
+        "100": 24,
+        "500": 7
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": true
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": true,
+      "failure_type": "ranking",
+      "confidence": 0.1178368330001831,
+      "top5": [
+        {
+          "image_id": "commons-2019814",
+          "lat": 58.410503,
+          "lng": 15.620445,
+          "similarity": 0.1178368330001831
+        },
+        {
+          "image_id": "commons-78314562",
+          "lat": 58.404584,
+          "lng": 15.610167,
+          "similarity": 0.11673897504806519
+        },
+        {
+          "image_id": "mapillary-305568727708964",
+          "lat": 58.408814203937,
+          "lng": 15.615421438608,
+          "similarity": 0.11562848091125488
+        },
+        {
+          "image_id": "commons-2019336",
+          "lat": 58.410552,
+          "lng": 15.618262,
+          "similarity": 0.10838252305984497
+        },
+        {
+          "image_id": "mapillary-3929196110461778",
+          "lat": 58.407404471658,
+          "lng": 15.625822332266,
+          "similarity": 0.10770666599273682
+        }
+      ]
+    },
+    {
+      "image_id": "commons-198642947",
+      "creator": "Stockholm100",
+      "capture_date": "2026-09-01",
+      "lat": 58.386161,
+      "lng": 15.561161,
+      "error_m": 5216.22873288968,
+      "nearest_reference_m": 118.8149886500797,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 2
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "no_coverage",
+      "confidence": 0.15983831882476807,
+      "top5": [
+        {
+          "image_id": "mapillary-472045297436025",
+          "lat": 58.404722761292,
+          "lng": 15.64337044424,
+          "similarity": 0.15983831882476807
+        },
+        {
+          "image_id": "mapillary-262085462329571",
+          "lat": 58.383739562083,
+          "lng": 15.558037591904,
+          "similarity": 0.14288145303726196
+        },
+        {
+          "image_id": "mapillary-382417359686229",
+          "lat": 58.384007746578,
+          "lng": 15.558442208363,
+          "similarity": 0.1405179500579834
+        },
+        {
+          "image_id": "mapillary-4077036942362420",
+          "lat": 58.404415106055,
+          "lng": 15.643694406008,
+          "similarity": 0.13724321126937866
+        },
+        {
+          "image_id": "mapillary-321889289606733",
+          "lat": 58.383976264279,
+          "lng": 15.558621391919,
+          "similarity": 0.1349484920501709
+        }
+      ]
+    },
+    {
+      "image_id": "commons-192802886",
+      "creator": "Napakaira",
+      "capture_date": "2026-05-25",
+      "lat": 58.403789,
+      "lng": 15.614578,
+      "error_m": 3791.161843128549,
+      "nearest_reference_m": 14.731136262686121,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": null
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.11369764804840088,
+      "top5": [
+        {
+          "image_id": "mapillary-4129976380388498",
+          "lat": 58.384250312914,
+          "lng": 15.561263383335,
+          "similarity": 0.11369764804840088
+        },
+        {
+          "image_id": "mapillary-800878018181794",
+          "lat": 58.433267992513,
+          "lng": 15.631315608995,
+          "similarity": 0.11180925369262695
+        },
+        {
+          "image_id": "mapillary-2043865179086203",
+          "lat": 58.41340197644,
+          "lng": 15.631939219453,
+          "similarity": 0.10504758358001709
+        },
+        {
+          "image_id": "mapillary-157427106383409-crop1",
+          "lat": 58.416721195789,
+          "lng": 15.63583042526,
+          "similarity": 0.10487419366836548
+        },
+        {
+          "image_id": "mapillary-763418857694782",
+          "lat": 58.434114619086,
+          "lng": 15.617283912893,
+          "similarity": 0.10476690530776978
+        }
+      ]
+    },
+    {
+      "image_id": "commons-177421325",
+      "creator": "Lundgren8",
+      "capture_date": "2025-10-19",
+      "lat": 58.432769,
+      "lng": 15.580253,
+      "error_m": 1846.0637601649473,
+      "nearest_reference_m": 19.65825064126625,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": null
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.1378592848777771,
+      "top5": [
+        {
+          "image_id": "mapillary-308593035482779",
+          "lat": 58.422158294723,
+          "lng": 15.604640505728,
+          "similarity": 0.1378592848777771
+        },
+        {
+          "image_id": "mapillary-509141716769272-crop5",
+          "lat": 58.418535912396,
+          "lng": 15.633356222756,
+          "similarity": 0.1366802453994751
+        },
+        {
+          "image_id": "mapillary-181372613737749-crop6",
+          "lat": 58.41509721019,
+          "lng": 15.636130676575,
+          "similarity": 0.12022840976715088
+        },
+        {
+          "image_id": "mapillary-343954460734755",
+          "lat": 58.386574442822,
+          "lng": 15.676452212624,
+          "similarity": 0.11993753910064697
+        },
+        {
+          "image_id": "mapillary-1866931243466677-crop5",
+          "lat": 58.414246963122,
+          "lng": 15.635583338161,
+          "similarity": 0.11967569589614868
+        }
+      ]
+    },
+    {
+      "image_id": "commons-185016341",
+      "creator": "Stockholm100",
+      "capture_date": "2026-02-25",
+      "lat": 58.411381,
+      "lng": 15.619153,
+      "error_m": 664.5495931549194,
+      "nearest_reference_m": 27.257152886315176,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 22
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.1111290454864502,
+      "top5": [
+        {
+          "image_id": "mapillary-373177330629666-crop2",
+          "lat": 58.414391945377,
+          "lng": 15.629009081211,
+          "similarity": 0.1111290454864502
+        },
+        {
+          "image_id": "commons-177122871",
+          "lat": 58.399078,
+          "lng": 15.577897,
+          "similarity": 0.10725390911102295
+        },
+        {
+          "image_id": "mapillary-295147172148321",
+          "lat": 58.432622865297,
+          "lng": 15.652115032618,
+          "similarity": 0.10398656129837036
+        },
+        {
+          "image_id": "mapillary-482179456368454",
+          "lat": 58.438170454425,
+          "lng": 15.549773765012,
+          "similarity": 0.10159099102020264
+        },
+        {
+          "image_id": "mapillary-576339769920024",
+          "lat": 58.436710002105,
+          "lng": 15.59577600384,
+          "similarity": 0.09914827346801758
+        }
+      ]
+    },
+    {
+      "image_id": "commons-177699568",
+      "creator": "Lundgren8",
+      "capture_date": "2025-11-01",
+      "lat": 58.422086,
+      "lng": 15.581447,
+      "error_m": 5837.408333453481,
+      "nearest_reference_m": 173.26901372918164,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": null
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "no_coverage",
+      "confidence": 0.17026138305664062,
+      "top5": [
+        {
+          "image_id": "commons-73958774",
+          "lat": 58.371573,
+          "lng": 15.608728,
+          "similarity": 0.17026138305664062
+        },
+        {
+          "image_id": "commons-73958759",
+          "lat": 58.371573,
+          "lng": 15.608728,
+          "similarity": 0.1625887155532837
+        },
+        {
+          "image_id": "mapillary-443217680266176-crop6",
+          "lat": 58.418469704538,
+          "lng": 15.631712933906,
+          "similarity": 0.150779128074646
+        },
+        {
+          "image_id": "mapillary-276113047506275-crop2",
+          "lat": 58.414536345748,
+          "lng": 15.633416628745,
+          "similarity": 0.15051400661468506
+        },
+        {
+          "image_id": "commons-73958757",
+          "lat": 58.371573,
+          "lng": 15.608728,
+          "similarity": 0.1486627459526062
+        }
+      ]
+    },
+    {
+      "image_id": "commons-184600384",
+      "creator": "Stockholm100",
+      "capture_date": "2026-02-19",
+      "lat": 58.385497,
+      "lng": 15.568414,
+      "error_m": 2021.425383507784,
+      "nearest_reference_m": 408.6870632947379,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": null
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "no_coverage",
+      "confidence": 0.10959106683731079,
+      "top5": [
+        {
+          "image_id": "commons-73958742",
+          "lat": 58.373593,
+          "lng": 15.59462,
+          "similarity": 0.10959106683731079
+        },
+        {
+          "image_id": "commons-21115026",
+          "lat": 58.39579,
+          "lng": 15.59407,
+          "similarity": 0.09657609462738037
+        },
+        {
+          "image_id": "commons-73958711",
+          "lat": 58.358001,
+          "lng": 15.621364,
+          "similarity": 0.09010732173919678
+        },
+        {
+          "image_id": "mapillary-3082068588688303",
+          "lat": 58.405295682243,
+          "lng": 15.591016804317,
+          "similarity": 0.08766728639602661
+        },
+        {
+          "image_id": "commons-73958795",
+          "lat": 58.403044,
+          "lng": 15.588515,
+          "similarity": 0.08484780788421631
+        }
+      ]
+    },
+    {
+      "image_id": "commons-177699575",
+      "creator": "Lundgren8",
+      "capture_date": "2025-11-01",
+      "lat": 58.436128,
+      "lng": 15.581311,
+      "error_m": 3390.65423149845,
+      "nearest_reference_m": 67.80843226128387,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": null
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.1720733642578125,
+      "top5": [
+        {
+          "image_id": "commons-128935441",
+          "lat": 58.412648,
+          "lng": 15.618466,
+          "similarity": 0.1720733642578125
+        },
+        {
+          "image_id": "mapillary-164429638944707-crop1",
+          "lat": 58.413052811261,
+          "lng": 15.613792401248,
+          "similarity": 0.162744402885437
+        },
+        {
+          "image_id": "mapillary-476743250200388-crop0",
+          "lat": 58.412976911502,
+          "lng": 15.615197972895,
+          "similarity": 0.15614479780197144
+        },
+        {
+          "image_id": "mapillary-476743250200388-crop1",
+          "lat": 58.412976911502,
+          "lng": 15.615197972895,
+          "similarity": 0.15430808067321777
+        },
+        {
+          "image_id": "commons-2019289",
+          "lat": 58.411648,
+          "lng": 15.615942,
+          "similarity": 0.1314486265182495
+        }
+      ]
+    },
+    {
+      "image_id": "commons-156535710",
+      "creator": "Mr.inky61",
+      "capture_date": "2024-12-01",
+      "lat": 58.408175,
+      "lng": 15.622594,
+      "error_m": 479.1995132048148,
+      "nearest_reference_m": 38.1526993982369,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.11186367273330688,
+      "top5": [
+        {
+          "image_id": "commons-73958828",
+          "lat": 58.411224,
+          "lng": 15.61678,
+          "similarity": 0.11186367273330688
+        },
+        {
+          "image_id": "commons-26900213",
+          "lat": 58.406512,
+          "lng": 15.522651,
+          "similarity": 0.10112214088439941
+        },
+        {
+          "image_id": "commons-87598748",
+          "lat": 58.41009,
+          "lng": 15.52361,
+          "similarity": 0.09376627206802368
+        },
+        {
+          "image_id": "mapillary-513870573121111",
+          "lat": 58.417305934142,
+          "lng": 15.543232519413,
+          "similarity": 0.09158128499984741
+        },
+        {
+          "image_id": "mapillary-265039575308516",
+          "lat": 58.43533308541,
+          "lng": 15.605976306654,
+          "similarity": 0.09102809429168701
+        }
+      ]
+    },
+    {
+      "image_id": "commons-199596662",
+      "creator": "Bene Riobó",
+      "capture_date": "2026-08-22",
+      "lat": 58.416507,
+      "lng": 15.624868,
+      "error_m": 2831.4443200103196,
+      "nearest_reference_m": 15.278108820085096,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 24
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.1831921935081482,
+      "top5": [
+        {
+          "image_id": "mapillary-867128257215293",
+          "lat": 58.393484214709,
+          "lng": 15.645633246539,
+          "similarity": 0.1831921935081482
+        },
+        {
+          "image_id": "mapillary-4372528792770926",
+          "lat": 58.393551911248,
+          "lng": 15.645793198396,
+          "similarity": 0.16478461027145386
+        },
+        {
+          "image_id": "mapillary-462931134809913",
+          "lat": 58.433807669443,
+          "lng": 15.598589342319,
+          "similarity": 0.13284552097320557
+        },
+        {
+          "image_id": "mapillary-185921449955229",
+          "lat": 58.392373693787,
+          "lng": 15.558417488186,
+          "similarity": 0.12189429998397827
+        },
+        {
+          "image_id": "mapillary-502814994253581",
+          "lat": 58.40671126746,
+          "lng": 15.578629831958,
+          "similarity": 0.11509895324707031
+        }
+      ]
+    },
+    {
+      "image_id": "commons-178505107",
+      "creator": "Lundgren8",
+      "capture_date": "2025-11-15",
+      "lat": 58.39165,
+      "lng": 15.586992,
+      "error_m": 4232.856171298897,
+      "nearest_reference_m": 9.81061849710695,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": null
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.10294884443283081,
+      "top5": [
+        {
+          "image_id": "mapillary-864888549343209",
+          "lat": 58.429650753294,
+          "lng": 15.591277106887,
+          "similarity": 0.10294884443283081
+        },
+        {
+          "image_id": "mapillary-883330303499406",
+          "lat": 58.421275327438,
+          "lng": 15.574599169969,
+          "similarity": 0.10144752264022827
+        },
+        {
+          "image_id": "mapillary-376290600344542",
+          "lat": 58.419975613244,
+          "lng": 15.603351151023,
+          "similarity": 0.09898686408996582
+        },
+        {
+          "image_id": "mapillary-722660727539898",
+          "lat": 58.429487773363,
+          "lng": 15.591025977443,
+          "similarity": 0.09776455163955688
+        },
+        {
+          "image_id": "mapillary-553673665601555",
+          "lat": 58.392431619818,
+          "lng": 15.547240369219,
+          "similarity": 0.0961909294128418
+        }
+      ]
+    },
+    {
+      "image_id": "commons-199396816",
+      "creator": "Bene Riobó",
+      "capture_date": "2026-08-22",
+      "lat": 58.417961,
+      "lng": 15.627775,
+      "error_m": 610.1275655309942,
+      "nearest_reference_m": 71.03761455370875,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 18
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.1459391713142395,
+      "top5": [
+        {
+          "image_id": "mapillary-237814264807631-crop6",
+          "lat": 58.413158448103,
+          "lng": 15.632841916052,
+          "similarity": 0.1459391713142395
+        },
+        {
+          "image_id": "mapillary-237814264807631-crop7",
+          "lat": 58.413158448103,
+          "lng": 15.632841916052,
+          "similarity": 0.1365814208984375
+        },
+        {
+          "image_id": "mapillary-295816342151693-crop2",
+          "lat": 58.413066760063,
+          "lng": 15.632872438863,
+          "similarity": 0.1238863468170166
+        },
+        {
+          "image_id": "commons-23005632",
+          "lat": 58.413055,
+          "lng": 15.630822,
+          "similarity": 0.12143343687057495
+        },
+        {
+          "image_id": "mapillary-260105035853720-crop0",
+          "lat": 58.413505549387,
+          "lng": 15.633463980636,
+          "similarity": 0.1195908784866333
+        }
+      ]
+    },
+    {
+      "image_id": "commons-189109327",
+      "creator": "Napakaira",
+      "capture_date": "2026-04-11",
+      "lat": 58.410083,
+      "lng": 15.626544,
+      "error_m": 6319.4084139972765,
+      "nearest_reference_m": 25.57942266680278,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 19
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.10564917325973511,
+      "top5": [
+        {
+          "image_id": "commons-26900364",
+          "lat": 58.403712,
+          "lng": 15.518746,
+          "similarity": 0.10564917325973511
+        },
+        {
+          "image_id": "commons-26900345",
+          "lat": 58.404432,
+          "lng": 15.522823,
+          "similarity": 0.10431820154190063
+        },
+        {
+          "image_id": "mapillary-268373605031415",
+          "lat": 58.434221065914,
+          "lng": 15.685240370721,
+          "similarity": 0.10401678085327148
+        },
+        {
+          "image_id": "mapillary-662822639099786",
+          "lat": 58.42235920289,
+          "lng": 15.607267969022,
+          "similarity": 0.09704601764678955
+        },
+        {
+          "image_id": "commons-26900358",
+          "lat": 58.403712,
+          "lng": 15.518746,
+          "similarity": 0.09315603971481323
+        }
+      ]
+    },
+    {
+      "image_id": "commons-198349195",
+      "creator": "Bene Riobó",
+      "capture_date": "2026-08-21",
+      "lat": 58.394678,
+      "lng": 15.563777,
+      "error_m": 1141.7453109395972,
+      "nearest_reference_m": 38.59319338431583,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 11
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.12448620796203613,
+      "top5": [
+        {
+          "image_id": "mapillary-832631924338536",
+          "lat": 58.40433382473,
+          "lng": 15.557112236207,
+          "similarity": 0.12448620796203613
+        },
+        {
+          "image_id": "mapillary-570825207640188",
+          "lat": 58.43803075574,
+          "lng": 15.583813383869,
+          "similarity": 0.1107710599899292
+        },
+        {
+          "image_id": "mapillary-920370208816359",
+          "lat": 58.391981952111,
+          "lng": 15.622936240467,
+          "similarity": 0.11062085628509521
+        },
+        {
+          "image_id": "mapillary-534034071096419",
+          "lat": 58.386963268005,
+          "lng": 15.678811232594,
+          "similarity": 0.10910218954086304
+        },
+        {
+          "image_id": "kartaview-2588191561",
+          "lat": 58.437908,
+          "lng": 15.586144,
+          "similarity": 0.10905581712722778
+        }
+      ]
+    },
+    {
+      "image_id": "commons-200159714",
+      "creator": "Bene Riobó",
+      "capture_date": "2026-08-22",
+      "lat": 58.416079,
+      "lng": 15.625889,
+      "error_m": 65.68328587807783,
+      "nearest_reference_m": 4.826728052686577,
+      "rank_of_first_within_m": {
+        "100": 1,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": true,
+      "failure_type": "success",
+      "confidence": 0.5401270985603333,
+      "top5": [
+        {
+          "image_id": "commons-22997675",
+          "lat": 58.415549,
+          "lng": 15.625391,
+          "similarity": 0.5401270985603333
+        },
+        {
+          "image_id": "commons-16546148",
+          "lat": 58.415864,
+          "lng": 15.625595,
+          "similarity": 0.5074149370193481
+        },
+        {
+          "image_id": "commons-21008391",
+          "lat": 58.41604,
+          "lng": 15.62594,
+          "similarity": 0.45532262325286865
+        },
+        {
+          "image_id": "commons-1408064",
+          "lat": 58.415456,
+          "lng": 15.625034,
+          "similarity": 0.32606273889541626
+        },
+        {
+          "image_id": "commons-16124419",
+          "lat": 58.416437,
+          "lng": 15.626357,
+          "similarity": 0.24284231662750244
+        }
+      ]
+    },
+    {
+      "image_id": "commons-199099878",
+      "creator": "Bene Riobó",
+      "capture_date": "2026-08-22",
+      "lat": 58.417449,
+      "lng": 15.625088,
+      "error_m": 4774.0217521041595,
+      "nearest_reference_m": 2.976369178407771,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 12
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.10505020618438721,
+      "top5": [
+        {
+          "image_id": "mapillary-1411296695898989",
+          "lat": 58.392339298565,
+          "lng": 15.558616113662,
+          "similarity": 0.10505020618438721
+        },
+        {
+          "image_id": "mapillary-3549645431975699",
+          "lat": 58.416700381925,
+          "lng": 15.549351901069,
+          "similarity": 0.1017717719078064
+        },
+        {
+          "image_id": "mapillary-3074583166094816",
+          "lat": 58.39236575462,
+          "lng": 15.558596072722,
+          "similarity": 0.10049694776535034
+        },
+        {
+          "image_id": "mapillary-540959527030611",
+          "lat": 58.396867959005,
+          "lng": 15.549582641457,
+          "similarity": 0.09925967454910278
+        },
+        {
+          "image_id": "mapillary-1435076340749819",
+          "lat": 58.42184678139,
+          "lng": 15.57153066058,
+          "similarity": 0.09879916906356812
+        }
+      ]
+    },
+    {
+      "image_id": "commons-199489793",
+      "creator": "Jojoo64",
+      "capture_date": "2026-06-24",
+      "lat": 58.415927,
+      "lng": 15.625568,
+      "error_m": 7.179589262627497,
+      "nearest_reference_m": 7.179589262627497,
+      "rank_of_first_within_m": {
+        "100": 1,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": true,
+      "failure_type": "success",
+      "confidence": 0.6524803042411804,
+      "top5": [
+        {
+          "image_id": "commons-16546148",
+          "lat": 58.415864,
+          "lng": 15.625595,
+          "similarity": 0.6524803042411804
+        },
+        {
+          "image_id": "commons-21008391",
+          "lat": 58.41604,
+          "lng": 15.62594,
+          "similarity": 0.5215753316879272
+        },
+        {
+          "image_id": "commons-22997675",
+          "lat": 58.415549,
+          "lng": 15.625391,
+          "similarity": 0.43097078800201416
+        },
+        {
+          "image_id": "commons-83184050",
+          "lat": 58.416111,
+          "lng": 15.625833,
+          "similarity": 0.2751964330673218
+        },
+        {
+          "image_id": "commons-1408064",
+          "lat": 58.415456,
+          "lng": 15.625034,
+          "similarity": 0.2684438228607178
+        }
+      ]
+    },
+    {
+      "image_id": "commons-195831562",
+      "creator": "Stockholm100",
+      "capture_date": "2026-05-21",
+      "lat": 58.434211,
+      "lng": 15.582956,
+      "error_m": 17.972097338265474,
+      "nearest_reference_m": 4.075623963582479,
+      "rank_of_first_within_m": {
+        "100": 1,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": true,
+      "failure_type": "success",
+      "confidence": 0.23333221673965454,
+      "top5": [
+        {
+          "image_id": "mapillary-1194966034288777",
+          "lat": 58.434366737769,
+          "lng": 15.583038586695,
+          "similarity": 0.23333221673965454
+        },
+        {
+          "image_id": "mapillary-649109979820827",
+          "lat": 58.434279190778,
+          "lng": 15.583082680389,
+          "similarity": 0.19563984870910645
+        },
+        {
+          "image_id": "mapillary-962207117868851",
+          "lat": 58.434215732683,
+          "lng": 15.583852449564,
+          "similarity": 0.17476564645767212
+        },
+        {
+          "image_id": "mapillary-223603142526974",
+          "lat": 58.434378669097,
+          "lng": 15.583002641768,
+          "similarity": 0.1671006679534912
+        },
+        {
+          "image_id": "mapillary-913644796157658",
+          "lat": 58.434208395772,
+          "lng": 15.583971411992,
+          "similarity": 0.15148049592971802
+        }
+      ]
+    },
+    {
+      "image_id": "commons-151059778",
+      "creator": "Katlinke",
+      "capture_date": "2024-07-11",
+      "lat": 58.36881,
+      "lng": 15.725,
+      "error_m": 10.555631161937457,
+      "nearest_reference_m": 10.555631161937457,
+      "rank_of_first_within_m": {
+        "100": 1,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": true,
+      "failure_type": "success",
+      "confidence": 0.5802345275878906,
+      "top5": [
+        {
+          "image_id": "commons-128463601",
+          "lat": 58.36882,
+          "lng": 15.72518,
+          "similarity": 0.5802345275878906
+        },
+        {
+          "image_id": "commons-94498110",
+          "lat": 58.36867,
+          "lng": 15.72426,
+          "similarity": 0.42953383922576904
+        },
+        {
+          "image_id": "commons-233252",
+          "lat": 58.410933,
+          "lng": 15.624606,
+          "similarity": 0.14213943481445312
+        },
+        {
+          "image_id": "commons-73958595",
+          "lat": 58.411386,
+          "lng": 15.624873,
+          "similarity": 0.118827223777771
+        },
+        {
+          "image_id": "commons-4344442",
+          "lat": 58.410497,
+          "lng": 15.61618,
+          "similarity": 0.11768496036529541
+        }
+      ]
+    },
+    {
+      "image_id": "commons-198643072",
+      "creator": "Stockholm100",
+      "capture_date": "2026-09-01",
+      "lat": 58.380547,
+      "lng": 15.569022,
+      "error_m": 3781.8569407230975,
+      "nearest_reference_m": 609.8513095069038,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": null
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "no_coverage",
+      "confidence": 0.12408125400543213,
+      "top5": [
+        {
+          "image_id": "commons-26900319",
+          "lat": 58.404432,
+          "lng": 15.522823,
+          "similarity": 0.12408125400543213
+        },
+        {
+          "image_id": "commons-26900323",
+          "lat": 58.404432,
+          "lng": 15.522823,
+          "similarity": 0.12315100431442261
+        },
+        {
+          "image_id": "commons-26900295",
+          "lat": 58.404432,
+          "lng": 15.522823,
+          "similarity": 0.1187894344329834
+        },
+        {
+          "image_id": "commons-26900296",
+          "lat": 58.404432,
+          "lng": 15.522823,
+          "similarity": 0.1172034740447998
+        },
+        {
+          "image_id": "commons-26900335",
+          "lat": 58.404432,
+          "lng": 15.522823,
+          "similarity": 0.11481630802154541
+        }
+      ]
+    },
+    {
+      "image_id": "commons-198127820",
+      "creator": "Bene Riobó",
+      "capture_date": "2026-08-21",
+      "lat": 58.39402,
+      "lng": 15.562395,
+      "error_m": 243.08794297812688,
+      "nearest_reference_m": 63.54955885632832,
+      "rank_of_first_within_m": {
+        "100": 42,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": true
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": true,
+      "failure_type": "ranking",
+      "confidence": 0.2071247696876526,
+      "top5": [
+        {
+          "image_id": "mapillary-1092274407948945",
+          "lat": 58.393300872665,
+          "lng": 15.558455756653,
+          "similarity": 0.2071247696876526
+        },
+        {
+          "image_id": "mapillary-308034580823599",
+          "lat": 58.393232361749,
+          "lng": 15.558275929185,
+          "similarity": 0.20647776126861572
+        },
+        {
+          "image_id": "mapillary-2729121447378587",
+          "lat": 58.39183451245,
+          "lng": 15.556933202524,
+          "similarity": 0.15610480308532715
+        },
+        {
+          "image_id": "mapillary-565924434375575",
+          "lat": 58.386569211249,
+          "lng": 15.675621536453,
+          "similarity": 0.1500847339630127
+        },
+        {
+          "image_id": "mapillary-1249807588812067",
+          "lat": 58.394213704779,
+          "lng": 15.560467848194,
+          "similarity": 0.14116406440734863
+        }
+      ]
+    },
+    {
+      "image_id": "commons-185015425",
+      "creator": "Stockholm100",
+      "capture_date": "2026-02-25",
+      "lat": 58.407294,
+      "lng": 15.620508,
+      "error_m": 1002.5167779320473,
+      "nearest_reference_m": 103.51434816905507,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 3
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "no_coverage",
+      "confidence": 0.14613091945648193,
+      "top5": [
+        {
+          "image_id": "mapillary-1672011517151721",
+          "lat": 58.406838213875,
+          "lng": 15.603320271966,
+          "similarity": 0.14613091945648193
+        },
+        {
+          "image_id": "mapillary-1643828650262097",
+          "lat": 58.407122678771,
+          "lng": 15.603579334429,
+          "similarity": 0.14500653743743896
+        },
+        {
+          "image_id": "mapillary-3943086035808081",
+          "lat": 58.404884793783,
+          "lng": 15.617063935511,
+          "similarity": 0.13916850090026855
+        },
+        {
+          "image_id": "mapillary-919250544303940",
+          "lat": 58.406834486446,
+          "lng": 15.60382850235,
+          "similarity": 0.13404011726379395
+        },
+        {
+          "image_id": "mapillary-4378413219057664",
+          "lat": 58.406705367359,
+          "lng": 15.603009057984,
+          "similarity": 0.131150484085083
+        }
+      ]
+    },
+    {
+      "image_id": "commons-177699576",
+      "creator": "Lundgren8",
+      "capture_date": "2025-11-01",
+      "lat": 58.426492,
+      "lng": 15.583067,
+      "error_m": 2903.8284449346643,
+      "nearest_reference_m": 322.1328902373887,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": null
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "no_coverage",
+      "confidence": 0.13965743780136108,
+      "top5": [
+        {
+          "image_id": "mapillary-938092796753816",
+          "lat": 58.407719817182,
+          "lng": 15.617730738856,
+          "similarity": 0.13965743780136108
+        },
+        {
+          "image_id": "mapillary-758220691510074",
+          "lat": 58.407854510355,
+          "lng": 15.617799287772,
+          "similarity": 0.13699501752853394
+        },
+        {
+          "image_id": "kartaview-1895027753",
+          "lat": 58.431169,
+          "lng": 15.594688,
+          "similarity": 0.12216848134994507
+        },
+        {
+          "image_id": "mapillary-900793998229686",
+          "lat": 58.421841801777,
+          "lng": 15.61470867831,
+          "similarity": 0.1217261552810669
+        },
+        {
+          "image_id": "mapillary-195416630307555",
+          "lat": 58.421961449181,
+          "lng": 15.602174604513,
+          "similarity": 0.11833709478378296
+        }
+      ]
+    },
+    {
+      "image_id": "commons-177420265",
+      "creator": "Lundgren8",
+      "capture_date": "2025-10-19",
+      "lat": 58.425217,
+      "lng": 15.5777,
+      "error_m": 3761.9534482945433,
+      "nearest_reference_m": 161.8455392809447,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 19
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "no_coverage",
+      "confidence": 0.17148005962371826,
+      "top5": [
+        {
+          "image_id": "commons-16546179",
+          "lat": 58.395417,
+          "lng": 15.608278,
+          "similarity": 0.17148005962371826
+        },
+        {
+          "image_id": "commons-16177418",
+          "lat": 58.395685,
+          "lng": 15.607764,
+          "similarity": 0.17002582550048828
+        },
+        {
+          "image_id": "commons-16177440",
+          "lat": 58.395668,
+          "lng": 15.608195,
+          "similarity": 0.1566956639289856
+        },
+        {
+          "image_id": "mapillary-219680796306560",
+          "lat": 58.405606339611,
+          "lng": 15.590058220768,
+          "similarity": 0.14890873432159424
+        },
+        {
+          "image_id": "commons-78315809",
+          "lat": 58.405214,
+          "lng": 15.609287,
+          "similarity": 0.14217418432235718
+        }
+      ]
+    },
+    {
+      "image_id": "commons-198643105",
+      "creator": "Stockholm100",
+      "capture_date": "2026-09-01",
+      "lat": 58.388086,
+      "lng": 15.568044,
+      "error_m": 4018.186086196433,
+      "nearest_reference_m": 247.6728603261413,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": null
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "no_coverage",
+      "confidence": 0.1508885622024536,
+      "top5": [
+        {
+          "image_id": "commons-10779423",
+          "lat": 58.4138,
+          "lng": 15.6165,
+          "similarity": 0.1508885622024536
+        },
+        {
+          "image_id": "commons-29166090",
+          "lat": 58.400278,
+          "lng": 15.601667,
+          "similarity": 0.13525521755218506
+        },
+        {
+          "image_id": "mapillary-956103045207961",
+          "lat": 58.40458499429,
+          "lng": 15.644086884781,
+          "similarity": 0.11735427379608154
+        },
+        {
+          "image_id": "commons-2011925",
+          "lat": 58.41398,
+          "lng": 15.617103,
+          "similarity": 0.11581248044967651
+        },
+        {
+          "image_id": "commons-177122870",
+          "lat": 58.396767,
+          "lng": 15.57765,
+          "similarity": 0.11427533626556396
+        }
+      ]
+    },
+    {
+      "image_id": "commons-185015250",
+      "creator": "Stockholm100",
+      "capture_date": "2026-02-25",
+      "lat": 58.405553,
+      "lng": 15.621694,
+      "error_m": 3286.4645117956684,
+      "nearest_reference_m": 120.09798310266648,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": null
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "no_coverage",
+      "confidence": 0.11999046802520752,
+      "top5": [
+        {
+          "image_id": "mapillary-882996122563690",
+          "lat": 58.434636705089,
+          "lng": 15.61164604842,
+          "similarity": 0.11999046802520752
+        },
+        {
+          "image_id": "mapillary-3797691837152516",
+          "lat": 58.413130414638,
+          "lng": 15.636622179946,
+          "similarity": 0.11797201633453369
+        },
+        {
+          "image_id": "commons-105404174",
+          "lat": 58.412814,
+          "lng": 15.629831,
+          "similarity": 0.11669588088989258
+        },
+        {
+          "image_id": "commons-15814050",
+          "lat": 58.398694,
+          "lng": 15.611062,
+          "similarity": 0.11649322509765625
+        },
+        {
+          "image_id": "mapillary-807888493492237",
+          "lat": 58.435626582902,
+          "lng": 15.692907647779,
+          "similarity": 0.11589932441711426
+        }
+      ]
+    },
+    {
+      "image_id": "commons-177699571",
+      "creator": "Lundgren8",
+      "capture_date": "2025-11-01",
+      "lat": 58.424622,
+      "lng": 15.578267,
+      "error_m": 3518.988989166607,
+      "nearest_reference_m": 225.21482486546645,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 12
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "no_coverage",
+      "confidence": 0.12814152240753174,
+      "top5": [
+        {
+          "image_id": "mapillary-204661367927753-crop6",
+          "lat": 58.41411956638,
+          "lng": 15.635272251791,
+          "similarity": 0.12814152240753174
+        },
+        {
+          "image_id": "commons-196316591",
+          "lat": 58.399733,
+          "lng": 15.578158,
+          "similarity": 0.12310367822647095
+        },
+        {
+          "image_id": "mapillary-791186028497262-crop5",
+          "lat": 58.41384219327,
+          "lng": 15.63011625265,
+          "similarity": 0.12052130699157715
+        },
+        {
+          "image_id": "mapillary-4288406871211872-crop5",
+          "lat": 58.413846514102,
+          "lng": 15.630117992375,
+          "similarity": 0.11960208415985107
+        },
+        {
+          "image_id": "mapillary-1053884108777435-crop4",
+          "lat": 58.413898676194,
+          "lng": 15.630020078268,
+          "similarity": 0.11781948804855347
+        }
+      ]
+    },
+    {
+      "image_id": "commons-155212395",
+      "creator": "AleWi",
+      "capture_date": "2024-09-14",
+      "lat": 58.412731,
+      "lng": 15.620364,
+      "error_m": 486.05059033354405,
+      "nearest_reference_m": 43.221851760922746,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.1402132511138916,
+      "top5": [
+        {
+          "image_id": "mapillary-529628021778145",
+          "lat": 58.408540592805,
+          "lng": 15.622738806003,
+          "similarity": 0.1402132511138916
+        },
+        {
+          "image_id": "mapillary-2108036379337806",
+          "lat": 58.408625421292,
+          "lng": 15.623475655687,
+          "similarity": 0.13331866264343262
+        },
+        {
+          "image_id": "mapillary-769949533624185",
+          "lat": 58.414466112792,
+          "lng": 15.654708797627,
+          "similarity": 0.12813639640808105
+        },
+        {
+          "image_id": "mapillary-175844421111618",
+          "lat": 58.408556518584,
+          "lng": 15.622873185092,
+          "similarity": 0.12807953357696533
+        },
+        {
+          "image_id": "mapillary-286545509843538-crop6",
+          "lat": 58.414190277577,
+          "lng": 15.614224210724,
+          "similarity": 0.12313836812973022
+        }
+      ]
+    },
+    {
+      "image_id": "commons-164238408",
+      "creator": "Hans G. Oberlack",
+      "capture_date": "2025-04-24",
+      "lat": 58.411723,
+      "lng": 15.619017,
+      "error_m": 299.20369668343477,
+      "nearest_reference_m": 34.27782752303713,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.24976515769958496,
+      "top5": [
+        {
+          "image_id": "commons-96322530",
+          "lat": 58.411583,
+          "lng": 15.624147,
+          "similarity": 0.24976515769958496
+        },
+        {
+          "image_id": "commons-96374944",
+          "lat": 58.409636,
+          "lng": 15.624628,
+          "similarity": 0.10254406929016113
+        },
+        {
+          "image_id": "commons-73958786",
+          "lat": 58.406002,
+          "lng": 15.589682,
+          "similarity": 0.07471919059753418
+        },
+        {
+          "image_id": "mapillary-798640637749052",
+          "lat": 58.43683831212,
+          "lng": 15.698325417315,
+          "similarity": 0.07059085369110107
+        },
+        {
+          "image_id": "commons-96421186",
+          "lat": 58.40926,
+          "lng": 15.6292,
+          "similarity": 0.06890213489532471
+        }
+      ]
+    },
+    {
+      "image_id": "commons-192964545",
+      "creator": "Stockholm100",
+      "capture_date": "2026-05-28",
+      "lat": 58.412019,
+      "lng": 15.614536,
+      "error_m": 348.18405864531286,
+      "nearest_reference_m": 42.78412280917953,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.1145639419555664,
+      "top5": [
+        {
+          "image_id": "mapillary-4102401766469767",
+          "lat": 58.408908381811,
+          "lng": 15.615221810889,
+          "similarity": 0.1145639419555664
+        },
+        {
+          "image_id": "commons-139787786",
+          "lat": 58.411659,
+          "lng": 15.612719,
+          "similarity": 0.11241567134857178
+        },
+        {
+          "image_id": "commons-40183001",
+          "lat": 58.41379,
+          "lng": 15.60842,
+          "similarity": 0.10842704772949219
+        },
+        {
+          "image_id": "mapillary-1213459092458231",
+          "lat": 58.40611956518,
+          "lng": 15.589157540449,
+          "similarity": 0.1083865761756897
+        },
+        {
+          "image_id": "mapillary-990265445137558",
+          "lat": 58.409841992513,
+          "lng": 15.618631954336,
+          "similarity": 0.10794341564178467
+        }
+      ]
+    },
+    {
+      "image_id": "commons-156596161",
+      "creator": "LA2",
+      "capture_date": "2024-12-12",
+      "lat": 58.40808,
+      "lng": 15.63205,
+      "error_m": 455.52932254529287,
+      "nearest_reference_m": 18.94211691549155,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.14016956090927124,
+      "top5": [
+        {
+          "image_id": "commons-78317780",
+          "lat": 58.40738,
+          "lng": 15.624345,
+          "similarity": 0.14016956090927124
+        },
+        {
+          "image_id": "mapillary-2840940566147481",
+          "lat": 58.408518258299,
+          "lng": 15.627699377672,
+          "similarity": 0.11269605159759521
+        },
+        {
+          "image_id": "mapillary-4266969533381328",
+          "lat": 58.406890347483,
+          "lng": 15.590555154377,
+          "similarity": 0.11122167110443115
+        },
+        {
+          "image_id": "mapillary-3983741635027177",
+          "lat": 58.40408307896,
+          "lng": 15.623256210045,
+          "similarity": 0.10445815324783325
+        },
+        {
+          "image_id": "commons-78317565",
+          "lat": 58.407496,
+          "lng": 15.628728,
+          "similarity": 0.10316115617752075
+        }
+      ]
+    },
+    {
+      "image_id": "commons-199430795",
+      "creator": "Bene Riobó",
+      "capture_date": "2026-08-22",
+      "lat": 58.416566,
+      "lng": 15.627191,
+      "error_m": 6696.223822186869,
+      "nearest_reference_m": 37.20156261325483,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 30
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.1386253833770752,
+      "top5": [
+        {
+          "image_id": "mapillary-3549683251836635",
+          "lat": 58.373782753924,
+          "lng": 15.70806108352,
+          "similarity": 0.1386253833770752
+        },
+        {
+          "image_id": "commons-26900298",
+          "lat": 58.404432,
+          "lng": 15.522823,
+          "similarity": 0.1323453187942505
+        },
+        {
+          "image_id": "commons-73958685",
+          "lat": 58.370324,
+          "lng": 15.625669,
+          "similarity": 0.13195574283599854
+        },
+        {
+          "image_id": "commons-200661183",
+          "lat": 58.443363,
+          "lng": 15.65435,
+          "similarity": 0.13184833526611328
+        },
+        {
+          "image_id": "commons-26900324",
+          "lat": 58.404432,
+          "lng": 15.522823,
+          "similarity": 0.12880122661590576
+        }
+      ]
+    },
+    {
+      "image_id": "commons-199674749",
+      "creator": "Bene Riobó",
+      "capture_date": "2026-08-22",
+      "lat": 58.419506,
+      "lng": 15.621022,
+      "error_m": 36.43778216596295,
+      "nearest_reference_m": 29.507519026231172,
+      "rank_of_first_within_m": {
+        "100": 1,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": true,
+      "failure_type": "success",
+      "confidence": 0.16185057163238525,
+      "top5": [
+        {
+          "image_id": "mapillary-317181244558032",
+          "lat": 58.419455209123,
+          "lng": 15.620403831128,
+          "similarity": 0.16185057163238525
+        },
+        {
+          "image_id": "mapillary-2054885104871562",
+          "lat": 58.419652243448,
+          "lng": 15.619952274412,
+          "similarity": 0.14513957500457764
+        },
+        {
+          "image_id": "mapillary-833224871937299",
+          "lat": 58.419389688618,
+          "lng": 15.620566546486,
+          "similarity": 0.144866943359375
+        },
+        {
+          "image_id": "mapillary-335365152617357",
+          "lat": 58.421909058789,
+          "lng": 15.614430618083,
+          "similarity": 0.1424655318260193
+        },
+        {
+          "image_id": "mapillary-1789979384776631",
+          "lat": 58.419259954428,
+          "lng": 15.620779193234,
+          "similarity": 0.14112472534179688
+        }
+      ]
+    },
+    {
+      "image_id": "commons-164238409",
+      "creator": "Hans G. Oberlack",
+      "capture_date": "2025-04-24",
+      "lat": 58.411449,
+      "lng": 15.61869,
+      "error_m": 1.689113234956359,
+      "nearest_reference_m": 1.689113234956359,
+      "rank_of_first_within_m": {
+        "100": 1,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": true,
+      "failure_type": "success",
+      "confidence": 0.6029337048530579,
+      "top5": [
+        {
+          "image_id": "commons-90290392",
+          "lat": 58.41146,
+          "lng": 15.61871,
+          "similarity": 0.6029337048530579
+        },
+        {
+          "image_id": "mapillary-476743250200388-crop3",
+          "lat": 58.412976911502,
+          "lng": 15.615197972895,
+          "similarity": 0.10938364267349243
+        },
+        {
+          "image_id": "mapillary-124020083032933-crop4",
+          "lat": 58.412972732956,
+          "lng": 15.614796866886,
+          "similarity": 0.1082460880279541
+        },
+        {
+          "image_id": "mapillary-476743250200388-crop4",
+          "lat": 58.412976911502,
+          "lng": 15.615197972895,
+          "similarity": 0.10057491064071655
+        },
+        {
+          "image_id": "commons-194869819",
+          "lat": 58.395794,
+          "lng": 15.577889,
+          "similarity": 0.10018658638000488
+        }
+      ]
+    },
+    {
+      "image_id": "commons-195616675",
+      "creator": "OJH",
+      "capture_date": "2026-06-23",
+      "lat": 58.404244,
+      "lng": 15.620546,
+      "error_m": 10.899269149118592,
+      "nearest_reference_m": 10.899269149118592,
+      "rank_of_first_within_m": {
+        "100": 1,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": true,
+      "failure_type": "success",
+      "confidence": 0.49443066120147705,
+      "top5": [
+        {
+          "image_id": "commons-2687069",
+          "lat": 58.404247,
+          "lng": 15.620359,
+          "similarity": 0.49443066120147705
+        },
+        {
+          "image_id": "commons-4884619",
+          "lat": 58.4045,
+          "lng": 15.619,
+          "similarity": 0.15681612491607666
+        },
+        {
+          "image_id": "commons-21008391",
+          "lat": 58.41604,
+          "lng": 15.62594,
+          "similarity": 0.1051899790763855
+        },
+        {
+          "image_id": "commons-16546148",
+          "lat": 58.415864,
+          "lng": 15.625595,
+          "similarity": 0.10273921489715576
+        },
+        {
+          "image_id": "mapillary-890270978496254-crop3",
+          "lat": 58.413453596291,
+          "lng": 15.615262196528,
+          "similarity": 0.10180479288101196
+        }
+      ]
+    },
+    {
+      "image_id": "commons-199123570",
+      "creator": "Bene Riobó",
+      "capture_date": "2026-08-22",
+      "lat": 58.418037,
+      "lng": 15.62514,
+      "error_m": 93.85043772404252,
+      "nearest_reference_m": 67.68959199344737,
+      "rank_of_first_within_m": {
+        "100": 1,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": true,
+      "failure_type": "success",
+      "confidence": 0.17417263984680176,
+      "top5": [
+        {
+          "image_id": "commons-72790836",
+          "lat": 58.417609,
+          "lng": 15.623751,
+          "similarity": 0.17417263984680176
+        },
+        {
+          "image_id": "commons-70879486",
+          "lat": 58.41195,
+          "lng": 15.62657,
+          "similarity": 0.12175250053405762
+        },
+        {
+          "image_id": "commons-128349120",
+          "lat": 58.405969,
+          "lng": 15.589765,
+          "similarity": 0.1106957197189331
+        },
+        {
+          "image_id": "mapillary-942652359869709",
+          "lat": 58.410373632493,
+          "lng": 15.61971764862,
+          "similarity": 0.11019963026046753
+        },
+        {
+          "image_id": "commons-8383423",
+          "lat": 58.400483,
+          "lng": 15.57716,
+          "similarity": 0.10109925270080566
+        }
+      ]
+    },
+    {
+      "image_id": "commons-184599069",
+      "creator": "Stockholm100",
+      "capture_date": "2026-02-19",
+      "lat": 58.377731,
+      "lng": 15.571839,
+      "error_m": 6060.131290983712,
+      "nearest_reference_m": 945.0910637524679,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": null
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "no_coverage",
+      "confidence": 0.11028677225112915,
+      "top5": [
+        {
+          "image_id": "mapillary-854669008466113",
+          "lat": 58.38639112066,
+          "lng": 15.674475840568,
+          "similarity": 0.11028677225112915
+        },
+        {
+          "image_id": "mapillary-1331522944143967",
+          "lat": 58.417776322416,
+          "lng": 15.5523134742,
+          "similarity": 0.10893666744232178
+        },
+        {
+          "image_id": "mapillary-492853388693285-crop7",
+          "lat": 58.416651190523,
+          "lng": 15.63567274372,
+          "similarity": 0.10715550184249878
+        },
+        {
+          "image_id": "mapillary-1013278469845252",
+          "lat": 58.411490252511,
+          "lng": 15.51848773213,
+          "similarity": 0.10621839761734009
+        },
+        {
+          "image_id": "kartaview-1625533369",
+          "lat": 58.433949,
+          "lng": 15.681776,
+          "similarity": 0.10365283489227295
+        }
+      ]
+    },
+    {
+      "image_id": "commons-156596193",
+      "creator": "LA2",
+      "capture_date": "2024-12-12",
+      "lat": 58.40834,
+      "lng": 15.63242,
+      "error_m": 1039.7903967719276,
+      "nearest_reference_m": 54.99151645868725,
+      "rank_of_first_within_m": {
+        "100": 46,
+        "500": 2
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": true
+        },
+        "500m": {
+          "1": false,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": true,
+      "failure_type": "ranking",
+      "confidence": 0.14255034923553467,
+      "top5": [
+        {
+          "image_id": "commons-16546002",
+          "lat": 58.411791,
+          "lng": 15.615829,
+          "similarity": 0.14255034923553467
+        },
+        {
+          "image_id": "mapillary-937058293750085-crop5",
+          "lat": 58.412016606245,
+          "lng": 15.632572236856,
+          "similarity": 0.1258317232131958
+        },
+        {
+          "image_id": "mapillary-2840940566147481",
+          "lat": 58.408518258299,
+          "lng": 15.627699377672,
+          "similarity": 0.12577402591705322
+        },
+        {
+          "image_id": "commons-21008391",
+          "lat": 58.41604,
+          "lng": 15.62594,
+          "similarity": 0.11979180574417114
+        },
+        {
+          "image_id": "commons-2029117",
+          "lat": 58.41397,
+          "lng": 15.629817,
+          "similarity": 0.1120462417602539
+        }
+      ]
+    },
+    {
+      "image_id": "commons-198120972",
+      "creator": "Bene Riobó",
+      "capture_date": "2026-08-21",
+      "lat": 58.394401,
+      "lng": 15.561453,
+      "error_m": 30.77556371995605,
+      "nearest_reference_m": 4.51657336659226,
+      "rank_of_first_within_m": {
+        "100": 1,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": true,
+      "failure_type": "success",
+      "confidence": 0.1335325837135315,
+      "top5": [
+        {
+          "image_id": "mapillary-4041343789245836",
+          "lat": 58.394535003341,
+          "lng": 15.56191509303,
+          "similarity": 0.1335325837135315
+        },
+        {
+          "image_id": "mapillary-207692744327083",
+          "lat": 58.433232098138,
+          "lng": 15.631121599657,
+          "similarity": 0.1270536184310913
+        },
+        {
+          "image_id": "commons-87599023",
+          "lat": 58.41009,
+          "lng": 15.52361,
+          "similarity": 0.12361359596252441
+        },
+        {
+          "image_id": "commons-194869762",
+          "lat": 58.402217,
+          "lng": 15.577806,
+          "similarity": 0.11917155981063843
+        },
+        {
+          "image_id": "mapillary-2919303645004571",
+          "lat": 58.393356528606,
+          "lng": 15.558608903522,
+          "similarity": 0.11841714382171631
+        }
+      ]
+    },
+    {
+      "image_id": "commons-148301084",
+      "creator": "Katlinke",
+      "capture_date": "2024-05-10",
+      "lat": 58.41552,
+      "lng": 15.61656,
+      "error_m": 1.2552324199006495,
+      "nearest_reference_m": 1.2552324199006495,
+      "rank_of_first_within_m": {
+        "100": 1,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": true,
+      "failure_type": "success",
+      "confidence": 0.7450695037841797,
+      "top5": [
+        {
+          "image_id": "commons-106744403",
+          "lat": 58.41551,
+          "lng": 15.61655,
+          "similarity": 0.7450695037841797
+        },
+        {
+          "image_id": "commons-109395408",
+          "lat": 58.41561,
+          "lng": 15.61666,
+          "similarity": 0.5162768959999084
+        },
+        {
+          "image_id": "commons-109366575",
+          "lat": 58.41564,
+          "lng": 15.61654,
+          "similarity": 0.5026514530181885
+        },
+        {
+          "image_id": "commons-109395406",
+          "lat": 58.41538,
+          "lng": 15.61593,
+          "similarity": 0.3652759790420532
+        },
+        {
+          "image_id": "commons-109395409",
+          "lat": 58.41536,
+          "lng": 15.61584,
+          "similarity": 0.15967321395874023
+        }
+      ]
+    },
+    {
+      "image_id": "commons-200664700",
+      "creator": "Herranderssvensson",
+      "capture_date": "2025-06-13",
+      "lat": 58.429454,
+      "lng": 15.592902,
+      "error_m": 2874.4427889662343,
+      "nearest_reference_m": 77.66881791133352,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 3
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.13907980918884277,
+      "top5": [
+        {
+          "image_id": "commons-106746204",
+          "lat": 58.418621,
+          "lng": 15.637726,
+          "similarity": 0.13907980918884277
+        },
+        {
+          "image_id": "commons-106746302",
+          "lat": 58.418335,
+          "lng": 15.63788,
+          "similarity": 0.1386113166809082
+        },
+        {
+          "image_id": "mapillary-1816018952718088",
+          "lat": 58.428276637609,
+          "lng": 15.592436499085,
+          "similarity": 0.11333483457565308
+        },
+        {
+          "image_id": "commons-45064754",
+          "lat": 58.42569,
+          "lng": 15.60511,
+          "similarity": 0.10527563095092773
+        },
+        {
+          "image_id": "mapillary-1451047641914875",
+          "lat": 58.434943808583,
+          "lng": 15.585963231842,
+          "similarity": 0.1026839017868042
+        }
+      ]
+    },
+    {
+      "image_id": "commons-198642913",
+      "creator": "Stockholm100",
+      "capture_date": "2026-09-01",
+      "lat": 58.394172,
+      "lng": 15.560144,
+      "error_m": 1083.6308065775013,
+      "nearest_reference_m": 12.828860607536077,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": null
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.15248560905456543,
+      "top5": [
+        {
+          "image_id": "commons-194869702",
+          "lat": 58.397133,
+          "lng": 15.577861,
+          "similarity": 0.15248560905456543
+        },
+        {
+          "image_id": "commons-139787789",
+          "lat": 58.411659,
+          "lng": 15.612719,
+          "similarity": 0.13935422897338867
+        },
+        {
+          "image_id": "mapillary-2835024650096658-crop2",
+          "lat": 58.416869711194,
+          "lng": 15.636202441393,
+          "similarity": 0.12861520051956177
+        },
+        {
+          "image_id": "commons-45064762",
+          "lat": 58.42569,
+          "lng": 15.60511,
+          "similarity": 0.12609612941741943
+        },
+        {
+          "image_id": "commons-139787786",
+          "lat": 58.411659,
+          "lng": 15.612719,
+          "similarity": 0.1239822506904602
+        }
+      ]
+    },
+    {
+      "image_id": "commons-177699579",
+      "creator": "Napakaira",
+      "capture_date": "2025-11-01",
+      "lat": 58.422397,
+      "lng": 15.587733,
+      "error_m": 2628.4536343249783,
+      "nearest_reference_m": 182.8017221563837,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": null
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "no_coverage",
+      "confidence": 0.1166917085647583,
+      "top5": [
+        {
+          "image_id": "mapillary-315156746861580-crop3",
+          "lat": 58.413945262303,
+          "lng": 15.629885001205,
+          "similarity": 0.1166917085647583
+        },
+        {
+          "image_id": "mapillary-2245850002216079-crop3",
+          "lat": 58.413841668418,
+          "lng": 15.630114982245,
+          "similarity": 0.10148251056671143
+        },
+        {
+          "image_id": "mapillary-830356097838019",
+          "lat": 58.432526395473,
+          "lng": 15.646334822627,
+          "similarity": 0.09943604469299316
+        },
+        {
+          "image_id": "mapillary-920370208816359",
+          "lat": 58.391981952111,
+          "lng": 15.622936240467,
+          "similarity": 0.09930288791656494
+        },
+        {
+          "image_id": "mapillary-1129949174167069",
+          "lat": 58.397763934246,
+          "lng": 15.651311820148,
+          "similarity": 0.09330379962921143
+        }
+      ]
+    },
+    {
+      "image_id": "commons-185015900",
+      "creator": "Stockholm100",
+      "capture_date": "2026-02-25",
+      "lat": 58.407622,
+      "lng": 15.620589,
+      "error_m": 1156.4493257172003,
+      "nearest_reference_m": 69.3714263785489,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 41
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.10635435581207275,
+      "top5": [
+        {
+          "image_id": "commons-78690911",
+          "lat": 58.398604,
+          "lng": 15.610701,
+          "similarity": 0.10635435581207275
+        },
+        {
+          "image_id": "mapillary-878850213904935",
+          "lat": 58.411922071874,
+          "lng": 15.528959239376,
+          "similarity": 0.10260653495788574
+        },
+        {
+          "image_id": "commons-175884127",
+          "lat": 58.408414,
+          "lng": 15.608625,
+          "similarity": 0.1024404764175415
+        },
+        {
+          "image_id": "mapillary-374640647208594",
+          "lat": 58.384852426782,
+          "lng": 15.533960808603,
+          "similarity": 0.09867799282073975
+        },
+        {
+          "image_id": "commons-35255063",
+          "lat": 58.411857,
+          "lng": 15.631816,
+          "similarity": 0.09657353162765503
+        }
+      ]
+    },
+    {
+      "image_id": "commons-192964574",
+      "creator": "Stockholm100",
+      "capture_date": "2026-05-28",
+      "lat": 58.411069,
+      "lng": 15.610778,
+      "error_m": 546.4767000431696,
+      "nearest_reference_m": 35.186137039275756,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 3
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.12334185838699341,
+      "top5": [
+        {
+          "image_id": "commons-175914264",
+          "lat": 58.406269,
+          "lng": 15.612792,
+          "similarity": 0.12334185838699341
+        },
+        {
+          "image_id": "commons-177493027",
+          "lat": 58.402369,
+          "lng": 15.579244,
+          "similarity": 0.12137776613235474
+        },
+        {
+          "image_id": "commons-2011923",
+          "lat": 58.413974,
+          "lng": 15.617071,
+          "similarity": 0.11721688508987427
+        },
+        {
+          "image_id": "commons-196316560",
+          "lat": 58.402358,
+          "lng": 15.579489,
+          "similarity": 0.09961831569671631
+        },
+        {
+          "image_id": "commons-196353060",
+          "lat": 58.402308,
+          "lng": 15.579417,
+          "similarity": 0.09795057773590088
+        }
+      ]
+    },
+    {
+      "image_id": "commons-177699573",
+      "creator": "Lundgren8",
+      "capture_date": "2025-11-01",
+      "lat": 58.427547,
+      "lng": 15.575894,
+      "error_m": 3443.5726831833535,
+      "nearest_reference_m": 67.8004993478972,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": null
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.10093092918395996,
+      "top5": [
+        {
+          "image_id": "mapillary-264407575381585-crop1",
+          "lat": 58.418611147295,
+          "lng": 15.632519605023,
+          "similarity": 0.10093092918395996
+        },
+        {
+          "image_id": "mapillary-3398837233550477-crop1",
+          "lat": 58.417922213322,
+          "lng": 15.636141732664,
+          "similarity": 0.0995326042175293
+        },
+        {
+          "image_id": "commons-45064754",
+          "lat": 58.42569,
+          "lng": 15.60511,
+          "similarity": 0.09818309545516968
+        },
+        {
+          "image_id": "mapillary-269546934896438-crop0",
+          "lat": 58.418628474447,
+          "lng": 15.632956663525,
+          "similarity": 0.09692072868347168
+        },
+        {
+          "image_id": "commons-175884124",
+          "lat": 58.407803,
+          "lng": 15.606189,
+          "similarity": 0.09499144554138184
+        }
+      ]
+    },
+    {
+      "image_id": "commons-190276890",
+      "creator": "Napakaira",
+      "capture_date": "2025-11-21",
+      "lat": 58.401614,
+      "lng": 15.611167,
+      "error_m": 46.542224799236116,
+      "nearest_reference_m": 10.221796324348857,
+      "rank_of_first_within_m": {
+        "100": 1,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": true,
+      "failure_type": "success",
+      "confidence": 0.14002680778503418,
+      "top5": [
+        {
+          "image_id": "mapillary-504627460952431",
+          "lat": 58.401242539618,
+          "lng": 15.61079883139,
+          "similarity": 0.14002680778503418
+        },
+        {
+          "image_id": "mapillary-942728493234254",
+          "lat": 58.401141678566,
+          "lng": 15.61064360081,
+          "similarity": 0.12467336654663086
+        },
+        {
+          "image_id": "mapillary-305001901081758",
+          "lat": 58.396413266616,
+          "lng": 15.651940159001,
+          "similarity": 0.11444753408432007
+        },
+        {
+          "image_id": "mapillary-184587343525666",
+          "lat": 58.397127476438,
+          "lng": 15.651522402079,
+          "similarity": 0.11148262023925781
+        },
+        {
+          "image_id": "mapillary-1218435912608833",
+          "lat": 58.41648493951,
+          "lng": 15.625712255633,
+          "similarity": 0.10753768682479858
+        }
+      ]
+    },
+    {
+      "image_id": "commons-151916875",
+      "creator": "Osthyveln från Österrike",
+      "capture_date": "2024-08-14",
+      "lat": 58.41114,
+      "lng": 15.62156,
+      "error_m": 99.91331368410067,
+      "nearest_reference_m": 16.47543820400667,
+      "rank_of_first_within_m": {
+        "100": 1,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": true,
+      "failure_type": "success",
+      "confidence": 0.34916847944259644,
+      "top5": [
+        {
+          "image_id": "commons-73958599",
+          "lat": 58.41126,
+          "lng": 15.62326,
+          "similarity": 0.34916847944259644
+        },
+        {
+          "image_id": "commons-73958597",
+          "lat": 58.411386,
+          "lng": 15.624873,
+          "similarity": 0.2621479034423828
+        },
+        {
+          "image_id": "commons-73958595",
+          "lat": 58.411386,
+          "lng": 15.624873,
+          "similarity": 0.2492588758468628
+        },
+        {
+          "image_id": "commons-21008413",
+          "lat": 58.41141,
+          "lng": 15.62519,
+          "similarity": 0.24419432878494263
+        },
+        {
+          "image_id": "commons-233252",
+          "lat": 58.410933,
+          "lng": 15.624606,
+          "similarity": 0.21987402439117432
+        }
+      ]
+    },
+    {
+      "image_id": "commons-152149937",
+      "creator": "Arkland",
+      "capture_date": "2024-03-11",
+      "lat": 58.457117,
+      "lng": 15.570263,
+      "error_m": 2811.8196243330813,
+      "nearest_reference_m": 1006.2256682884181,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": null
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "no_coverage",
+      "confidence": 0.13563942909240723,
+      "top5": [
+        {
+          "image_id": "mapillary-561108281617229",
+          "lat": 58.437112996708,
+          "lng": 15.540701843133,
+          "similarity": 0.13563942909240723
+        },
+        {
+          "image_id": "mapillary-1138413513345442-crop6",
+          "lat": 58.43826,
+          "lng": 15.574925833333,
+          "similarity": 0.13372504711151123
+        },
+        {
+          "image_id": "mapillary-2927127630898670",
+          "lat": 58.438780401888,
+          "lng": 15.575303584634,
+          "similarity": 0.13035064935684204
+        },
+        {
+          "image_id": "mapillary-1138413513345442-crop7",
+          "lat": 58.43826,
+          "lng": 15.574925833333,
+          "similarity": 0.1289585828781128
+        },
+        {
+          "image_id": "mapillary-1138413513345442-crop0",
+          "lat": 58.43826,
+          "lng": 15.574925833333,
+          "similarity": 0.12803775072097778
+        }
+      ]
+    },
+    {
+      "image_id": "commons-200917125",
+      "creator": "AleWi",
+      "capture_date": "2026-05-25",
+      "lat": 58.416944,
+      "lng": 15.625292,
+      "error_m": 54.768448988184545,
+      "nearest_reference_m": 0.6772600779927969,
+      "rank_of_first_within_m": {
+        "100": 1,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": true,
+      "failure_type": "success",
+      "confidence": 0.2177673578262329,
+      "top5": [
+        {
+          "image_id": "mapillary-640256954749981",
+          "lat": 58.416544161741,
+          "lng": 15.625841182668,
+          "similarity": 0.2177673578262329
+        },
+        {
+          "image_id": "mapillary-1274506669893305",
+          "lat": 58.417099976282,
+          "lng": 15.624623869824,
+          "similarity": 0.19780659675598145
+        },
+        {
+          "image_id": "commons-2029129",
+          "lat": 58.415765,
+          "lng": 15.626673,
+          "similarity": 0.18647551536560059
+        },
+        {
+          "image_id": "mapillary-268999039495937",
+          "lat": 58.417004154403,
+          "lng": 15.62480513621,
+          "similarity": 0.1778355836868286
+        },
+        {
+          "image_id": "commons-16124419",
+          "lat": 58.416437,
+          "lng": 15.626357,
+          "similarity": 0.1750308871269226
+        }
+      ]
+    },
+    {
+      "image_id": "commons-177699580",
+      "creator": "Lundgren8",
+      "capture_date": "2025-11-01",
+      "lat": 58.421303,
+      "lng": 15.586986,
+      "error_m": 5500.913122444854,
+      "nearest_reference_m": 71.77740073227892,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 15
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.16245979070663452,
+      "top5": [
+        {
+          "image_id": "mapillary-2795437270615977",
+          "lat": 58.405898903154,
+          "lng": 15.497232286447,
+          "similarity": 0.16245979070663452
+        },
+        {
+          "image_id": "mapillary-913653759718073",
+          "lat": 58.416324243018,
+          "lng": 15.54846950682,
+          "similarity": 0.13305139541625977
+        },
+        {
+          "image_id": "mapillary-831173194159651",
+          "lat": 58.384169825378,
+          "lng": 15.561147208038,
+          "similarity": 0.13083553314208984
+        },
+        {
+          "image_id": "mapillary-487635595624365",
+          "lat": 58.384067159771,
+          "lng": 15.560968663807,
+          "similarity": 0.13013720512390137
+        },
+        {
+          "image_id": "mapillary-3990061484362307-crop7",
+          "lat": 58.414315655653,
+          "lng": 15.635727495174,
+          "similarity": 0.12473338842391968
+        }
+      ]
+    },
+    {
+      "image_id": "commons-177699569",
+      "creator": "Lundgren8",
+      "capture_date": "2025-11-01",
+      "lat": 58.418664,
+      "lng": 15.589589,
+      "error_m": 4914.046586185013,
+      "nearest_reference_m": 75.20221184713243,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": null
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.1271458864212036,
+      "top5": [
+        {
+          "image_id": "mapillary-2876035422725194",
+          "lat": 58.392185446578,
+          "lng": 15.657124896999,
+          "similarity": 0.1271458864212036
+        },
+        {
+          "image_id": "mapillary-3465596503540201",
+          "lat": 58.369885189458,
+          "lng": 15.556658592966,
+          "similarity": 0.12268722057342529
+        },
+        {
+          "image_id": "mapillary-526130115078559",
+          "lat": 58.385004165552,
+          "lng": 15.560996828335,
+          "similarity": 0.11551147699356079
+        },
+        {
+          "image_id": "mapillary-281147850384162",
+          "lat": 58.395512622487,
+          "lng": 15.650983092389,
+          "similarity": 0.10708636045455933
+        },
+        {
+          "image_id": "mapillary-466496574412303",
+          "lat": 58.405288180027,
+          "lng": 15.590413490567,
+          "similarity": 0.1068810224533081
+        }
+      ]
+    },
+    {
+      "image_id": "commons-156596177",
+      "creator": "LA2",
+      "capture_date": "2024-12-12",
+      "lat": 58.40836,
+      "lng": 15.63192,
+      "error_m": 454.5120391077107,
+      "nearest_reference_m": 43.88082041037116,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.1531451940536499,
+      "top5": [
+        {
+          "image_id": "commons-78317780",
+          "lat": 58.40738,
+          "lng": 15.624345,
+          "similarity": 0.1531451940536499
+        },
+        {
+          "image_id": "commons-21008391",
+          "lat": 58.41604,
+          "lng": 15.62594,
+          "similarity": 0.14826816320419312
+        },
+        {
+          "image_id": "mapillary-2840940566147481",
+          "lat": 58.408518258299,
+          "lng": 15.627699377672,
+          "similarity": 0.10442709922790527
+        },
+        {
+          "image_id": "commons-78317566",
+          "lat": 58.407496,
+          "lng": 15.628728,
+          "similarity": 0.10397839546203613
+        },
+        {
+          "image_id": "mapillary-125253562909714",
+          "lat": 58.408826716764,
+          "lng": 15.615236709738,
+          "similarity": 0.10259395837783813
+        }
+      ]
+    },
+    {
+      "image_id": "commons-156596165",
+      "creator": "LA2",
+      "capture_date": "2024-12-12",
+      "lat": 58.40792,
+      "lng": 15.6331,
+      "error_m": 1060.3561921880435,
+      "nearest_reference_m": 69.18411167391696,
+      "rank_of_first_within_m": {
+        "100": 5,
+        "500": 5
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": true,
+          "20": true,
+          "50": true
+        },
+        "500m": {
+          "1": false,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": true,
+      "failure_type": "ranking",
+      "confidence": 0.12694096565246582,
+      "top5": [
+        {
+          "image_id": "mapillary-2718478045116462",
+          "lat": 58.408988477793,
+          "lng": 15.615011274787,
+          "similarity": 0.12694096565246582
+        },
+        {
+          "image_id": "mapillary-130119349107155-crop2",
+          "lat": 58.41384168756,
+          "lng": 15.633839005503,
+          "similarity": 0.12287086248397827
+        },
+        {
+          "image_id": "mapillary-746444079377426-crop2",
+          "lat": 58.413688378376,
+          "lng": 15.630732353517,
+          "similarity": 0.11905026435852051
+        },
+        {
+          "image_id": "mapillary-1385435848523739",
+          "lat": 58.43276053922,
+          "lng": 15.520534379086,
+          "similarity": 0.11432653665542603
+        },
+        {
+          "image_id": "mapillary-514601842901244",
+          "lat": 58.407971588675,
+          "lng": 15.63152263203,
+          "similarity": 0.11404943466186523
+        }
+      ]
+    },
+    {
+      "image_id": "commons-200664732",
+      "creator": "Herranderssvensson",
+      "capture_date": "2025-06-13",
+      "lat": 58.418474,
+      "lng": 15.593958,
+      "error_m": 2225.875409649921,
+      "nearest_reference_m": 62.59945520256433,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 2
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.1146535873413086,
+      "top5": [
+        {
+          "image_id": "commons-177169280",
+          "lat": 58.4003,
+          "lng": 15.577939,
+          "similarity": 0.1146535873413086
+        },
+        {
+          "image_id": "mapillary-832704605495553",
+          "lat": 58.421221028999,
+          "lng": 15.593812327161,
+          "similarity": 0.11066567897796631
+        },
+        {
+          "image_id": "mapillary-937058293750085-crop1",
+          "lat": 58.412016606245,
+          "lng": 15.632572236856,
+          "similarity": 0.11051928997039795
+        },
+        {
+          "image_id": "kartaview-444096305",
+          "lat": 58.419448,
+          "lng": 15.594882,
+          "similarity": 0.10955590009689331
+        },
+        {
+          "image_id": "mapillary-247347383506313",
+          "lat": 58.409583727859,
+          "lng": 15.616615429943,
+          "similarity": 0.10777312517166138
+        }
+      ]
+    },
+    {
+      "image_id": "commons-177699567",
+      "creator": "Lundgren8",
+      "capture_date": "2025-11-01",
+      "lat": 58.4213,
+      "lng": 15.581294,
+      "error_m": 1779.9827609255913,
+      "nearest_reference_m": 85.48964900473136,
+      "rank_of_first_within_m": {
+        "100": 48,
+        "500": 38
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": true
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": true,
+      "failure_type": "ranking",
+      "confidence": 0.1280040144920349,
+      "top5": [
+        {
+          "image_id": "commons-1082200",
+          "lat": 58.405922,
+          "lng": 15.589782,
+          "similarity": 0.1280040144920349
+        },
+        {
+          "image_id": "commons-73958791",
+          "lat": 58.406002,
+          "lng": 15.589682,
+          "similarity": 0.12421631813049316
+        },
+        {
+          "image_id": "mapillary-1649097926115064",
+          "lat": 58.406109962246,
+          "lng": 15.596762315527,
+          "similarity": 0.11790716648101807
+        },
+        {
+          "image_id": "mapillary-1620798459023025",
+          "lat": 58.406407336337,
+          "lng": 15.598164925923,
+          "similarity": 0.1154981255531311
+        },
+        {
+          "image_id": "mapillary-480865053179002",
+          "lat": 58.386598786918,
+          "lng": 15.675600492302,
+          "similarity": 0.11446720361709595
+        }
+      ]
+    },
+    {
+      "image_id": "commons-192778818",
+      "creator": "Napakaira",
+      "capture_date": "2026-05-25",
+      "lat": 58.404136,
+      "lng": 15.614136,
+      "error_m": 7570.543333275778,
+      "nearest_reference_m": 54.22761366291378,
+      "rank_of_first_within_m": {
+        "100": null,
+        "500": 8
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": false,
+          "5": false,
+          "20": false,
+          "50": false
+        },
+        "500m": {
+          "1": false,
+          "5": false,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": false,
+      "failure_type": "retrieval",
+      "confidence": 0.11526453495025635,
+      "top5": [
+        {
+          "image_id": "commons-128463601",
+          "lat": 58.36882,
+          "lng": 15.72518,
+          "similarity": 0.11526453495025635
+        },
+        {
+          "image_id": "mapillary-4249887658375588",
+          "lat": 58.408835511783,
+          "lng": 15.61521077269,
+          "similarity": 0.0958206057548523
+        },
+        {
+          "image_id": "commons-105182164",
+          "lat": 58.411167,
+          "lng": 15.626,
+          "similarity": 0.09562480449676514
+        },
+        {
+          "image_id": "mapillary-1054816808704692",
+          "lat": 58.410371118302,
+          "lng": 15.616774336026,
+          "similarity": 0.09199082851409912
+        },
+        {
+          "image_id": "mapillary-166345235390455-crop5",
+          "lat": 58.413927052008,
+          "lng": 15.615080984362,
+          "similarity": 0.09022337198257446
+        }
+      ]
+    },
+    {
+      "image_id": "commons-148649162",
+      "creator": "Katlinke",
+      "capture_date": "2024-05-23",
+      "lat": 58.39283,
+      "lng": 15.6402,
+      "error_m": 60.476640010271474,
+      "nearest_reference_m": 50.49525321191464,
+      "rank_of_first_within_m": {
+        "100": 1,
+        "500": 1
+      },
+      "true_in_top_k": {
+        "100m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        },
+        "500m": {
+          "1": true,
+          "5": true,
+          "20": true,
+          "50": true
+        }
+      },
+      "true_in_top50_at_100m": true,
+      "failure_type": "success",
+      "confidence": 0.14257019758224487,
+      "top5": [
+        {
+          "image_id": "commons-9461203",
+          "lat": 58.392778,
+          "lng": 15.639167,
+          "similarity": 0.14257019758224487
+        },
+        {
+          "image_id": "commons-82010386",
+          "lat": 58.365093,
+          "lng": 15.56233,
+          "similarity": 0.13227123022079468
+        },
+        {
+          "image_id": "commons-7689205",
+          "lat": 58.414021,
+          "lng": 15.617757,
+          "similarity": 0.12173449993133545
+        },
+        {
+          "image_id": "commons-45064754",
+          "lat": 58.42569,
+          "lng": 15.60511,
+          "similarity": 0.1211976408958435
+        },
+        {
+          "image_id": "commons-16177330",
+          "lat": 58.395685,
+          "lng": 15.607764,
+          "similarity": 0.11283671855926514
+        }
+      ]
+    }
+  ]
+}

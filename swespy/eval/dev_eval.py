@@ -13,7 +13,7 @@ import numpy as np
 
 from eval import geo_eval
 from eval.public_photos import ROOT
-from swespy.config import LINKOPING_AREA, get_settings
+from swespy.config import LINKOPING_AREA, MAJORITY_BASELINE_LATLNG, get_settings
 from swespy.model.locator import Gallery, GeoLocator
 from swespy.model.megaloc import MegaLocEmbedder, file_hash
 
@@ -83,7 +83,8 @@ def report(
     label: str,
     provenance: dict[str, Any],
 ) -> dict[str, Any]:
-    majority = geo_eval.majority_location(refs)
+    lat, lng = MAJORITY_BASELINE_LATLNG
+    majority = {"lat": lat, "lng": lng, "source": "fixed city-centre coordinate (config)"}
     metrics = geo_eval.summarize(rows)
     baseline = {**geo_eval.constant_baseline(queries, majority["lat"], majority["lng"]),
                 "location": majority}
@@ -97,8 +98,9 @@ def report(
                             f"covered and within top {DEPTH}; retrieval: covered, not in top "
                             f"{DEPTH}",
             "ci95": "Wilson score interval",
-            "majority_location": "Mean position of the most populated 1 km UTM gallery cell "
-                                 "(no evaluation labels used)",
+            "majority_location": "Fixed city-centre coordinate MAJORITY_BASELINE_LATLNG "
+                                 "(mean of the most populated 1 km cell of the original "
+                                 "gallery); independent of the evaluated gallery",
             "random_reference": "Exact expectation of predicting a uniformly random reference",
             "reranking_ceiling": "Share with a reference within 100 m in the top 50; geometric "
                                  "verification cannot recover matches beyond the same scene",

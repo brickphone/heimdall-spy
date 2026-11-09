@@ -1,11 +1,11 @@
 {
   "label": "baseline_v2",
-  "created_at": "2026-11-07T08:55:36.353062+00:00",
+  "created_at": "2026-11-08T12:25:25.548107+00:00",
   "definitions": {
     "prediction": "Location of the top-ranked reference",
     "failure_type": "no_coverage: no reference within 100 m; success: top-1 within 100 m; ranking: covered and within top 50; retrieval: covered, not in top 50",
     "ci95": "Wilson score interval",
-    "majority_location": "Mean position of the most populated 1 km UTM gallery cell (no evaluation labels used)",
+    "majority_location": "Fixed city-centre coordinate MAJORITY_BASELINE_LATLNG (mean of the most populated 1 km cell of the original gallery); independent of the evaluated gallery",
     "random_reference": "Exact expectation of predicting a uniformly random reference",
     "reranking_ceiling": "Share with a reference within 100 m in the top 50; geometric verification cannot recover matches beyond the same scene"
   },
@@ -283,12 +283,7 @@
       "location": {
         "lat": 58.410117221872895,
         "lng": 15.626609382633434,
-        "cell": [
-          536,
-          6474
-        ],
-        "cell_m": 1000,
-        "reference_count": 369
+        "source": "fixed city-centre coordinate (config)"
       }
     },
     "random_reference": {
