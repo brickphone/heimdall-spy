@@ -42,6 +42,7 @@ from swespy.config import LINKOPING_AREA, get_settings, in_area
 
 ROOT = Path("data/gallery_v2")
 LEGACY_GALLERY = Path("data/linkoping_dense/city_v1/manifest.json")
+V1_INDEX = Path("data/benchmarks/runs/linkoping_city-20261106T130343.492589Z/gallery-index.json")
 TILE_ZOOM = 14
 THIN_DISTANCE_M = 10.0  # User decision 2026-11-07 (3 m did not fit on disk).
 THIN_HEADING_DEG = 20.0
@@ -220,7 +221,7 @@ def tile_range() -> list[tuple[int, int]]:
     return [(x, y) for x in range(tx(west), tx(east) + 1) for y in range(ty(north), ty(south) + 1)]
 
 
-def decode_tile(content: bytes, x: int, y: int) -> list[dict[str, Any]]:
+def decode_tile(content: bytes, x: int, y: int, extra: bool = False) -> list[dict[str, Any]]:
     import mapbox_vector_tile
 
     n = 2**TILE_ZOOM
@@ -241,6 +242,15 @@ def decode_tile(content: bytes, x: int, y: int) -> list[dict[str, Any]]:
                 "is_pano": bool(p.get("is_pano")),
                 "tile_lat": lat,
                 "tile_lng": lng,
+                **(
+                    {
+                        "compass_angle": p.get("compass_angle"),
+                        "creator_id": p.get("creator_id"),
+                        "organization_id": p.get("organization_id"),
+                    }
+                    if extra
+                    else {}
+                ),
             }
         )
     return rows
@@ -396,7 +406,9 @@ def commons_time(value: str) -> tuple[int, str] | None:
     return int(moment.timestamp() * 1000), ("exact" if hh else "day")
 
 
-def commons_row(page: dict[str, Any]) -> tuple[dict[str, Any] | None, str]:
+def commons_row(
+    page: dict[str, Any], polygon: tuple[tuple[float, float], ...] = LINKOPING_AREA
+) -> tuple[dict[str, Any] | None, str]:
     """Normalise one Commons file page; returns (row, rejection reason)."""
     import html as html_lib
 
@@ -420,7 +432,7 @@ def commons_row(page: dict[str, Any]) -> tuple[dict[str, Any] | None, str]:
     if taken is None:
         return None, "no_capture_time"
     lat, lng = float(ext["GPSLatitude"]), float(ext["GPSLongitude"])
-    if not in_area(lng, lat):
+    if not in_area(lng, lat, polygon):
         return None, "outside_polygon"
     title, description = page["title"], plain(ext.get("ImageDescription", ""))
     if quality.indoor_text(title, description, ext.get("Categories", "")):
@@ -725,6 +737,21 @@ def legacy_images() -> dict[str, Path]:
     return found
 
 
+def store_checked(path: Path, content: bytes, keep_original: bool) -> str | None:
+    """Write the stored version of a downloaded image; returns a failure label or None."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".part")
+    try:
+        tmp.write_bytes(content if keep_original else store_resized(content))
+    except OSError:
+        return "undecodable"
+    if valid_jpeg(tmp):
+        tmp.replace(path)
+        return None
+    tmp.unlink(missing_ok=True)
+    return "invalid_image"
+
+
 def valid_jpeg(path: Path) -> bool:
     from PIL import Image
 
@@ -744,7 +771,7 @@ async def download(root: Path) -> None:
 
 
 async def download_refs(
-    root: Path, refs: list[dict[str, Any]], concurrency: int = 12, progress: bool = False
+    root: Path, refs: list[dict[str, Any]], concurrency: int = 24, progress: bool = False
 ) -> dict[str, int]:
     """Download missing images for ``refs``; returns failure counts. Resumable."""
     token = get_settings().mapillary_access_token.strip()
@@ -763,18 +790,13 @@ async def download_refs(
             if r.status_code != 200 or not r.content:
                 failures[f"http_{r.status_code}"] += 1
                 return
-            path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = path.with_suffix(".part")
-            try:
-                tmp.write_bytes(r.content if ref.get("is_pano") else store_resized(r.content))
-            except OSError:
-                failures["undecodable"] += 1
-                return
-            if valid_jpeg(tmp):
-                tmp.replace(path)
-            else:
-                tmp.unlink(missing_ok=True)
-                failures["invalid_image"] += 1
+            # Decode/resize/verify off the event loop: Pillow releases the GIL, so images
+            # are processed in parallel instead of serialising the whole download.
+            outcome = await asyncio.to_thread(
+                store_checked, path, r.content, bool(ref.get("is_pano"))
+            )
+            if outcome:
+                failures[outcome] += 1
 
         async def mapillary_batch(batch: list[dict[str, Any]]) -> None:
             fresh = []
@@ -813,16 +835,18 @@ async def download_refs(
 
         mly = [r for r in todo if r["source"] == "mapillary"]
         batches = [mly[i : i + 100] for i in range(0, len(mly), 100)]
-        # Four URL batches in flight hide the ~6 s Graph API latency per batch.
-        for start in range(0, len(batches), 4):
+        # Eight URL batches in flight hide the ~6 s Graph API latency per batch
+        # (~130 IDs/s, far below the 10,000 search requests/min limit).
+        in_flight = 8
+        for start in range(0, len(batches), in_flight):
             if free_bytes(root) < MIN_FREE_BYTES:
                 log("download", state="stopped_low_disk", free_gb=free_bytes(root) / 2**30)
                 return dict(failures)
-            await asyncio.gather(*[mapillary_batch(b) for b in batches[start : start + 4]])
+            await asyncio.gather(*[mapillary_batch(b) for b in batches[start : start + in_flight]])
             if progress and start % 40 == 0:
                 log(
                     "download",
-                    mapillary_batches_done=min(start + 4, len(batches)),
+                    mapillary_batches_done=min(start + in_flight, len(batches)),
                     of=len(batches),
                     failures=dict(failures),
                     free_gb=round(free_bytes(root) / 2**30, 1),
@@ -1015,7 +1039,7 @@ def coverage(root: Path, index_name: str = "gallery-index.json") -> None:
     refs = read_json(root / index_name)["references_in_index_order"]
     lats, lngs = np.array([r["lat"] for r in refs]), np.array([r["lng"] for r in refs])
     dev = read_json(leakage.DEV_MANIFEST)["queries"]
-    old = read_json(Path(get_settings().gallery_index))["references_in_index_order"]
+    old = read_json(V1_INDEX)["references_in_index_order"]
     old = [r for r in old if in_area(r["lng"], r["lat"])]
     olats, olngs = np.array([r["lat"] for r in old]), np.array([r["lng"] for r in old])
     nearest_new = [float(haversine_m(q["lat"], q["lng"], lats, lngs).min()) for q in dev]

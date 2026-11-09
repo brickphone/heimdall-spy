@@ -76,9 +76,56 @@ hash-only near-duplicate rule flagged 401, of which 389 were consecutive frames 
 drive a median 20 m apart, so it was narrowed. Contact sheet with 30 random rejections
 per rule: [`quality_filter_review.html`](quality_filter_review.html).
 
-## Pending (after the overnight build)
+## Build results (RunPod A40, 2026-11-08)
 
-Download failures, panorama crop count, per-rule quality counts on the new images,
-final gallery size, coverage heatmap (`data/gallery_v2/coverage.png`), empty
-250 m cells, and the dev `nearest_reference_m` distribution (gallery v1 vs v2). After
-that come the 3–5 walk-route proposals (`python -m eval.walk_routes`).
+Built on one RunPod A40 pod (EU-SE-1, $0.59/h; the RTX 3090 had no EU stock) with
+`scripts/cloud_build.sh`. It ran 75.6 min from pod creation to termination and cost
+≈ $0.75. Setup took 4 min 19 s; both stages ran 09:42–10:50 UTC. 96/96 chunks
+finished with 0 errors and 0 download failures. Encoding ran at 66–95 img/s on the
+A40, while download plus filtering ran at ~25–33 img/s and was the bottleneck. Two
+mid-run fixes, each followed by a resumable restart, moved image resizing off the
+asyncio event loop and raised download concurrency (24 parallel images, 8 Graph API
+batches in flight).
+
+The test manifest was never copied to the pod. The sealed pixel-hash guard ran on
+the Mac (`--finalize-sealed`) and excluded **0** references in both indexes.
+**`--verify 200` passed:** CUDA vs Mac MPS descriptors had minimum cosine 0.9999996.
+
+| | `recent` | `historic` (recent + pre-2018) |
+| --- | ---: | ---: |
+| Input to quality filter | 36,588 | 97,326 |
+| Dropped: near-duplicate | 3,575 | 4,046 |
+| Dropped: blurry | 337 | 903 |
+| Dropped: sky/ground only | 76 | 663 |
+| **References in index** | **32,600** | **91,714** |
+| Mapillary / Commons / KartaView | 30,558 / 1,710 / 332 | 89,672 / 1,710 / 332 |
+| location_source: mapillary_computed / raw | 30,557 / 1 | 89,671 / 1 |
+| location_source: commons_exif_low_precision / kartaview_gps | 1,710 / 332 | 1,710 / 332 |
+| Pre-2018 references | 2,747 (panorama crops, Commons, KartaView) | 61,861 |
+| Empty 250 m cells inside polygon | 1,807 / 2,519 | 1,326 / 2,519 |
+
+Near-duplicates were checked on a sample of 200 dropped `recent` frames. 169 matched
+a kept frame within 5 m, all by the **same photographer, from a different sequence,
+captured < 1 minute apart**: the same capture split across Mapillary sequences.
+Panorama crops survived (2,035 of 2,056 in `recent`).
+
+### Dev set: distance from each dev photo to its nearest reference (66 photos)
+
+| | Gallery v1 (polygon, 2,489) | v2 `recent` (32,600) | v2 `historic` (91,714) |
+| --- | ---: | ---: | ---: |
+| Median | 190 m | 47 m | **11 m** |
+| 25th / 75th percentile | 120 / 336 m | 15 / 85 m | 4 / 36 m |
+| ≤ 25 m | 3 | 22 | **43** |
+| ≤ 50 m | 5 | 33 | **54** |
+| ≤ 100 m | 13 | 50 | **63** |
+| ≤ 500 m | 56 | 63 | **65** |
+
+This measures coverage only, not accuracy. Nearby references may face another way
+or show a different scene. Retrieval accuracy for each stage is evaluated in Part 6.
+Coverage maps: `data/gallery_v2/coverage-recent.png` and `coverage-historic.png`
+(not in git).
+
+## Next
+
+Walk-route proposals from the `historic` density grid (`python -m eval.walk_routes`),
+then stop for the user to record them.

@@ -7,3 +7,5 @@ if [ -z "${MAPILLARY_ACCESS_TOKEN:-}" ] && [ -r /proc/1/environ ]; then
   export MAPILLARY_ACCESS_TOKEN
 fi
 export UV_PYTHON_DOWNLOADS=never   # Use the image's Python 3.12; never fetch one from GitHub.
+# RunPod images enable hf_transfer, which is not in uv.lock; use the standard downloader.
+export HF_HUB_ENABLE_HF_TRANSFER=0

@@ -1,10 +1,15 @@
-"""Propose self-collected walk routes that fill the largest gallery coverage gaps.
+"""Propose self-collected walk routes for the reference gallery.
 
-Selection uses ONLY the gallery v2 density grid and the OpenStreetMap street network
-(so empty fields/forest/water are not proposed). Evaluation-photo locations are never
-read. Output: data/gallery_v2/walk-routes.{json,geojson,html}.
+Two modes, both using ONLY the gallery and the OpenStreetMap street network; evaluation
+photo locations are never read. Output: data/gallery_v2/walk-routes.{json,geojson,html}.
 
-    python -m eval.walk_routes --routes 5
+- ``pedestrian`` (default): pedestrian-only streets (footway, pedestrian, path, steps,
+  living_street) whose points have no gallery reference within ``SERVED_RADIUS_M``.
+  The gallery is almost entirely car-mounted Mapillary imagery, so these are the
+  places with no pedestrian viewpoint at all.
+- ``density``: 250 m cells with walkable streets but <= 2 references.
+
+    python -m eval.walk_routes --routes 5 [--mode density]
 """
 
 from __future__ import annotations
@@ -27,6 +32,10 @@ WALKABLE = (
     "residential|living_street|pedestrian|footway|path|cycleway|tertiary|"
     "secondary|primary|unclassified|service|steps"
 )
+PEDESTRIAN = ("footway", "pedestrian", "path", "steps", "living_street")
+SERVED_RADIUS_M = 15.0  # A pedestrian-street point is served if a reference is this close.
+SAMPLE_STEP_M = 10.0
+BLOCK_SEPARATION_M = 1500.0  # Proposed walk areas are at least this far apart.
 GAP_MAX_REFS = 2  # A 250 m cell with <= 2 references counts as a gap.
 MIN_STREET_M = 150  # Ignore cells with almost no walkable street.
 
@@ -153,6 +162,126 @@ def propose(root: Path, count: int) -> dict[str, Any]:
     return report
 
 
+def propose_pedestrian(root: Path, index: Path, count: int) -> dict[str, Any]:
+    """Areas with the most pedestrian-only street length lacking any nearby reference."""
+    import math
+
+    refs = read_json(index)["references_in_index_order"]
+    cell_deg = SERVED_RADIUS_M / 111_320
+    occupied: set[tuple[int, int]] = set()
+    for r in refs:
+        occupied.add(
+            (
+                int(r["lat"] / cell_deg),
+                int(r["lng"] / (cell_deg / math.cos(math.radians(r["lat"])))),
+            )
+        )
+
+    def served(lat: float, lng: float) -> bool:
+        cy, cx = int(lat / cell_deg), int(lng / (cell_deg / math.cos(math.radians(lat))))
+        return any((cy + dy, cx + dx) in occupied for dy in (-1, 0, 1) for dx in (-1, 0, 1))
+
+    west, south, east, north = polygon_bbox()
+    cell, dlat = 250, 250 / 111_320
+    dlng = cell / (111_320 * math.cos(math.radians((south + north) / 2)))
+    unserved: dict[tuple[int, int], float] = defaultdict(float)
+    total: dict[tuple[int, int], float] = defaultdict(float)
+    names: dict[tuple[int, int], set[str]] = defaultdict(set)
+    segments: dict[tuple[int, int], list[list[tuple[float, float]]]] = defaultdict(list)
+    for way in streets(root):
+        if way["highway"] not in PEDESTRIAN:
+            continue
+        g = way["geometry"]
+        for (a_lat, a_lng), (b_lat, b_lng) in zip(g, g[1:], strict=False):
+            length = float(haversine_m(a_lat, a_lng, np.array([b_lat]), np.array([b_lng]))[0])
+            steps = max(1, int(length // SAMPLE_STEP_M))
+            for k in range(steps):
+                t = (k + 0.5) / steps
+                lat, lng = a_lat + t * (b_lat - a_lat), a_lng + t * (b_lng - a_lng)
+                if not in_area(lng, lat):
+                    continue
+                c = (int((lat - south) / dlat), int((lng - west) / dlng))
+                total[c] += length / steps
+                if not served(lat, lng):
+                    unserved[c] += length / steps
+                    segments[c].append([(a_lat, a_lng), (b_lat, b_lng)])
+                    if way["name"]:
+                        names[c].add(way["name"])
+    # Unserved paths form one city-wide network, so connected areas are not walkable
+    # routes. Instead score 500 m blocks (2x2 cells) and pick the best blocks greedily,
+    # at least BLOCK_SEPARATION_M apart, so routes spread across the city.
+    blocks: dict[tuple[int, int], list[tuple[int, int]]] = defaultdict(list)
+    for c in unserved:
+        blocks[(c[0] // 2, c[1] // 2)].append(c)
+    ranked_blocks = sorted(blocks.items(), key=lambda kv: -sum(unserved[c] for c in kv[1]))
+    clusters, centres = [], []
+    for _, members in ranked_blocks:
+        lat = float(np.mean([south + (c[0] + 0.5) * dlat for c in members]))
+        lng = float(np.mean([west + (c[1] + 0.5) * dlng for c in members]))
+        if any(
+            float(haversine_m(lat, lng, np.array([a]), np.array([b]))[0]) < BLOCK_SEPARATION_M
+            for a, b in centres
+        ):
+            continue
+        clusters.append(members)
+        centres.append((lat, lng))
+        if len(clusters) == count:
+            break
+    routes = []
+    for rank, members in enumerate(clusters[:count], 1):
+        segs = {tuple(map(tuple, s)) for c in members for s in segments[c]}
+        routes.append(
+            {
+                "rank": rank,
+                "centre": {
+                    "lat": round(float(np.mean([south + (c[0] + 0.5) * dlat for c in members])), 5),
+                    "lng": round(float(np.mean([west + (c[1] + 0.5) * dlng for c in members])), 5),
+                },
+                "cells_250m": len(members),
+                "unserved_pedestrian_km": round(sum(unserved[c] for c in members) / 1000, 2),
+                "pedestrian_km_in_area": round(sum(total[c] for c in members) / 1000, 2),
+                "streets": sorted(set().union(*(names[c] for c in members)))[:25],
+                "cells": [[south + c[0] * dlat, west + c[1] * dlng] for c in members],
+                "segments": [list(s) for s in segs],
+            }
+        )
+    report = {
+        "mode": "pedestrian",
+        "rule": f"OSM {', '.join(PEDESTRIAN)} sampled every {SAMPLE_STEP_M:.0f} m; a point is "
+        f"unserved if no gallery reference lies within {SERVED_RADIUS_M:.0f} m; 500 m "
+        f"blocks ranked by unserved length, picked greedily >= {BLOCK_SEPARATION_M:.0f} m "
+        "apart. Eval photo locations not used.",
+        "gallery": str(index),
+        "references": len(refs),
+        "pedestrian_km_total": round(sum(total.values()) / 1000, 1),
+        "pedestrian_km_unserved": round(sum(unserved.values()) / 1000, 1),
+        "blocks_with_unserved_paths": len(blocks),
+        "routes": [{k: v for k, v in r.items() if k not in ("cells", "segments")} for r in routes],
+    }
+    write_json(root / "walk-routes.json", report)
+    write_json(
+        root / "walk-routes.geojson",
+        {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {"rank": r["rank"]},
+                    "geometry": {
+                        "type": "MultiLineString",
+                        "coordinates": [[[p[1], p[0]] for p in s] for s in r["segments"]],
+                    },
+                }
+                for r in routes
+            ],
+        },
+    )
+    for r in routes:
+        r["street_length_km"] = r["unserved_pedestrian_km"]
+    render(root, routes, {}, dlat, dlng)
+    return report
+
+
 def render(
     root: Path, routes: list[dict[str, Any]], grid: dict[str, Any], dlat: float, dlng: float
 ) -> None:
@@ -196,10 +325,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--routes", type=int, default=5)
+    parser.add_argument("--mode", choices=["pedestrian", "density"], default="pedestrian")
+    parser.add_argument(
+        "--index", type=Path, default=Path("data/gallery_v2/gallery-index-historic.json")
+    )
     args = parser.parse_args()
     if not 3 <= args.routes <= 5:
         parser.error("Propose 3-5 routes")
-    print(json.dumps(propose(args.root, args.routes), indent=1, ensure_ascii=False))
+    if args.mode == "density":
+        result = propose(args.root, args.routes)
+    else:
+        result = propose_pedestrian(args.root, args.index, args.routes)
+    print(json.dumps(result, indent=1, ensure_ascii=False))
 
 
 if __name__ == "__main__":

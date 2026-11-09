@@ -41,3 +41,30 @@ def test_routes_rank_street_gaps_and_ignore_covered_or_streetless_cells(tmp_path
     assert [r["streets"] for r in routes] == [["A-gatan", "B-gatan"], ["C-vägen"]]
     assert routes[0]["gap_cells_250m"] == 2 and routes[0]["existing_references"] == 0
     assert (tmp_path / "walk-routes.html").exists()
+
+
+def test_pedestrian_mode_proposes_only_unserved_footways(tmp_path):
+    lat0, lng0 = 58.41, 15.62
+    dlng = 0.0001
+    served_way = {
+        "name": "Served-gången",
+        "highway": "footway",
+        "geometry": [(lat0, lng0 + i * dlng) for i in range(0, 40, 4)],
+    }
+    lonely_way = {
+        "name": "Ensam-stigen",
+        "highway": "path",
+        "geometry": [(lat0 + 0.01, lng0 + i * dlng) for i in range(0, 40, 4)],
+    }
+    road = {
+        "name": "Bilvägen",
+        "highway": "residential",
+        "geometry": [(lat0 + 0.02, lng0 + i * dlng) for i in range(0, 40, 4)],
+    }
+    (tmp_path / "osm-walkable.json").write_text(json.dumps([served_way, lonely_way, road]))
+    refs = [{"lat": lat0, "lng": lng0 + i * dlng} for i in range(0, 40)]  # Along the first.
+    index = tmp_path / "index.json"
+    index.write_text(json.dumps({"references_in_index_order": refs}))
+    report = walk_routes.propose_pedestrian(tmp_path, index, 3)
+    assert [r["streets"] for r in report["routes"]] == [["Ensam-stigen"]]
+    assert report["routes"][0]["unserved_pedestrian_km"] > 0.15
