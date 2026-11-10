@@ -28,11 +28,15 @@ data/megaloc/
 data/benchmarks/
 data/linkoping_dense/
 .venv-benchmark/
+.venv-gsv-internal/
 data/public_eval/
 data/failure_audit/
 data/classifier/
 data/paired_views/
 data/gallery_v2/
 data/crossview/
+data/gsv/
+data/gsv_internal/
+data/osm/
 data/field_photos/
 data/torch/

@@ -3,6 +3,7 @@ pyproject.toml
 swespy/__init__.py
 swespy/cities.py
 swespy/config.py
+swespy/gsv.py
 swespy.egg-info/PKG-INFO
 swespy.egg-info/SOURCES.txt
 swespy.egg-info/dependency_links.txt
@@ -13,8 +14,10 @@ swespy/api/main.py
 swespy/api/middleware.py
 swespy/api/schemas.py
 swespy/api/routes/__init__.py
+swespy/api/routes/field_photos.py
 swespy/api/routes/health.py
 swespy/api/routes/predict.py
+swespy/api/routes/references.py
 swespy/data/__init__.py
 swespy/data/mapillary.py
 swespy/data/pipeline.py

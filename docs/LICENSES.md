@@ -66,7 +66,10 @@ This is an engineering audit, not legal advice. **Rule:** a component marked *No
 | KartaView | CC BY-SA 4.0 | Yes | Credit "© Grab and KartaView Contributors"; share-alike. The terms page did not render for our fetcher; licence taken from KartaView/OSM documentation. Confirm API terms before bulk use | [kartaview.org/terms](https://kartaview.org/terms), [OSM wiki](https://wiki.openstreetmap.org/wiki/KartaView) |
 | Wikimedia Commons | Per file | Only CC0, Public Domain Mark, CC BY, CC BY-SA | Exclude NC and ND files (crops/resizes are derivatives). Follow the Wikimedia User-Agent policy (already implemented: `HeimdallSpyResearchBot`) | [Commons licensing](https://commons.wikimedia.org/wiki/Commons:Licensing) |
 | Self-collected walks | Owned by the user | Yes | Faces and plates blurred before storage; no private interiors | — |
-| Flickr, Google Street View | — | — | Excluded (user decision / terms) | — |
+| Flickr | — | — | Excluded (user decision) | — |
+| Google Street View | Proprietary (Google Maps Platform Terms + EEA Service Specific Terms) | **No.** The terms forbid storing, indexing or deriving datasets from the content, and in the EEA forbid use "With any Map" | **Separate gap-filling index `gsv_v1`, risk accepted by the owner on 2026-11-09** (descriptors only; images never stored; never CC-labelled; never training). Not in the default gallery. See `docs/experiments/10_gsv_index.md` | [GMP terms](https://cloud.google.com/maps-platform/terms), [EEA terms](https://cloud.google.com/terms/maps-platform/eea/maps-service-terms) |
+| Google Street View via `streetlevel` 0.12.13 (unofficial backend) | Library: MIT ([sk-zk/streetlevel](https://github.com/sk-zk/streetlevel)). Imagery: proprietary, Google; the backend is undocumented and not covered by any API agreement | **No** | **Pilot only, risk and responsibility accepted by the owner on 2026-11-10.** Separate environment on one pod; no image on disk; never in demo, eval or training. See `docs/experiments/11_gsv_internal_pilot.md` | [PyPI](https://pypi.org/project/streetlevel/0.12.13/) |
+| OpenStreetMap data (Geofabrik extract) | ODbL 1.0 | Yes, with attribution and share-alike for derived databases | Used only to plan where Street View gaps are (`data/osm/`, git-ignored) | [Geofabrik](https://download.geofabrik.de/europe/sweden.html) |
 
 ## Mapillary terms checked
 
