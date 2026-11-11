@@ -38,6 +38,9 @@ class FakeEmbedder:
     def embed_image(self, image) -> np.ndarray:
         return np.array([0, 1, 0, 0], dtype=np.float32)
 
+    def batch_images(self, images) -> np.ndarray:
+        return np.stack([self.embed_image(image) for image in images])
+
 
 def test_gallery_excludes_references_outside_project_area(tmp_path: Path) -> None:
     gallery = loc.Gallery(gallery_files(tmp_path))
@@ -116,6 +119,9 @@ def test_locator_reranks_with_geometric_verification(tmp_path: Path) -> None:
             for key, path in references:
                 yield {"inliers": 120 if "h0" in str(path) or key == "h0" else 0, "matches": 150}
 
+        def verify_multi(self, images, pairs):
+            yield from self.verify_iter(images[0], [(key, ref) for _, key, ref in pairs])
+
         def verify(self, image, references):
             return list(self.verify_iter(image, references))
 
@@ -133,3 +139,35 @@ def test_locator_reranks_with_geometric_verification(tmp_path: Path) -> None:
     assert result["candidates"][0]["inliers"] == 120
     assert result["confidence_state"] == "ok"
     assert (result["predicted_lat"], result["predicted_lng"]) == (58.4108, 15.6214)
+
+
+def test_mmap_gallery_equals_in_memory_index(tmp_path: Path) -> None:
+    import hashlib
+
+    rng = np.random.default_rng(1)
+    folder = tmp_path / "descriptors"
+    folder.mkdir()
+    refs = []
+    for i in range(40):
+        vector = rng.normal(size=16).astype(np.float32)
+        np.save(folder / f"h{i}.npy", vector / np.linalg.norm(vector))
+        lat = 58.30 if i % 7 == 0 else 58.4108  # Every 7th lies outside the polygon.
+        refs.append({"image_id": f"r{i}", "lat": lat, "lng": 15.6214, "sha256": f"h{i}"})
+    manifest = tmp_path / "gallery-index.json"
+    manifest.write_text(json.dumps({
+        "format": "descriptor_cache_v1", "dimension": 16, "descriptor_dir": str(folder),
+        "references_in_index_order": refs, "model_identity": IDENTITY,
+        "index_sha256": hashlib.sha256("\n".join(r["sha256"] for r in refs).encode()).hexdigest(),
+    }))
+    mapped = loc.Gallery(manifest)
+    flat = loc.Gallery(manifest, mmap=False)
+    assert isinstance(mapped.vectors, np.memmap) and mapped.index is None
+    queries = rng.normal(size=(5, 16)).astype(np.float32)
+    for got, want in zip(mapped.search(queries, 10), flat.search(queries, 10), strict=True):
+        np.testing.assert_array_equal(got, want)
+    # A different polygon filter makes the matrix stale; it is rebuilt, not reused.
+    path, sidecar = loc.vectors_file(manifest)
+    key = json.loads(sidecar.read_text())["key"]
+    wide = ((15.0, 58.0), (16.0, 58.0), (16.0, 59.0), (15.0, 59.0))
+    assert len(loc.Gallery(manifest, wide).refs) == 40
+    assert json.loads(sidecar.read_text())["key"] != key

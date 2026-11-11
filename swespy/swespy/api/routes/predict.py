@@ -13,7 +13,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from loguru import logger
 
-from swespy.api.schemas import MatchResult, PredictResponse
+from swespy.api.schemas import AnalyzeResponse, MatchResult, PredictResponse
 from swespy.model.imageio import UnsupportedImage
 
 router = APIRouter(tags=["predict"])
@@ -50,6 +50,7 @@ def to_response(result: dict[str, Any], elapsed_ms: float, region: dict[str, flo
         top_matches=[
             MatchResult(similarity_score=c["similarity"], inliers=c.get("inliers"),
                         score=c.get("score"), source=c.get("source"),
+                        variant=c.get("variant"),
                         capture_year=c.get("capture_year"), **{
                 k: c[k] for k in ("rank", "image_id", "lat", "lng", "creator", "source_url",
                                   "license_url")})
@@ -57,6 +58,12 @@ def to_response(result: dict[str, Any], elapsed_ms: float, region: dict[str, flo
         ],
         processing_time_ms=elapsed_ms,
         region=region,
+        searched_variant=result.get("searched_variant", "manual" if region else "whole"),
+        searched_region=result.get("searched_region", region),
+        person_share=result.get("person_share"),
+        alternative_region=result.get("alternative_region"),
+        variants=result.get("variants", []),
+        timings_ms=result.get("timings_ms", {}),
         versions=versions,
     )
 
@@ -83,6 +90,23 @@ async def predict(
     # No image hash or coordinates are logged, so logs cannot link a photo to a place.
     logger.info("predict latency_ms={:.2f}", elapsed_ms)
     return to_response(result, elapsed_ms, selected, request.app.state.locator.versions())
+
+
+@router.post("/analyze", response_model=AnalyzeResponse)
+async def analyze(request: Request, file: UploadFile = File(...)) -> AnalyzeResponse:  # noqa: B008
+    """People share and a suggested region for a photo, before searching (no retrieval).
+
+    The upload is processed in memory and never stored.
+    """
+    contents, _ = await read_upload(request, file, None)
+    start = time.perf_counter()
+    try:
+        out = await asyncio.to_thread(request.app.state.locator.analyze_bytes, contents)
+    except UnsupportedImage as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    logger.info("analyze latency_ms={:.2f}", elapsed_ms)
+    return AnalyzeResponse(**out, processing_time_ms=elapsed_ms)
 
 
 async def event_stream(locator: Any, contents: bytes, region: dict[str, float] | None,

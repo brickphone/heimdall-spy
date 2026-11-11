@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     field_photos_dir: str = "data/field_photos"  # Opt-in demo saves; future eval only.
     rerank_k: int = 5  # Candidates verified (sweep 2026-11-09: K=5 matches K=50 on dev, 4 s).
     rerank_device: str = "auto"  # ALIKED device; LightGlue runs on CPU when this is MPS.
+    # Automatic region search (docs/experiments/14_auto_regions.md): "whole", "masked"
+    # (people masked) or "full" (masked plus automatic crops).
+    variants_mode: str = "full"
+    segment_device: str = "auto"
     s2_cell_level: int = 14
     # Central Linkoping pilot, not the full city or municipal boundary.
     sweden_bbox: tuple[float, float, float, float] = (15.58, 58.39, 15.66, 58.43)

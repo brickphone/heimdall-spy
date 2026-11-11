@@ -125,25 +125,33 @@ class GeometricVerifier:
             return {"matches": n, "inliers": 0}
         return {"matches": n, "inliers": int(mask.sum()) if mask is not None else 0}
 
+    def reference_features(self, key: str, ref: Any) -> dict[str, Any]:
+        """Features of one reference given as a PIL image or a path (cached under ``key``)."""
+        from PIL import Image
+
+        if isinstance(ref, str | Path):
+            cached = self.cache_dir and (self.cache_dir / f"{key}.pt").exists()
+            if cached:
+                return self.features(None, key)
+            with Image.open(ref) as im:
+                return self.features(im.copy(), key)
+        return self.features(ref, key)
+
     def verify_iter(self, query_image: Any, references: list[tuple[str, Any]]) -> Any:
         """Yield inliers for each (cache key, PIL image or path) reference, in order.
 
         The query's features are extracted once, so results equal ``verify``'s.
         """
-        from PIL import Image
+        yield from self.verify_multi([query_image], [(0, key, ref) for key, ref in references])
 
-        q = self.features(query_image)
-        for key, ref in references:
-            if isinstance(ref, str | Path):
-                cached = self.cache_dir and (self.cache_dir / f"{key}.pt").exists()
-                if cached:
-                    feats = self.features(None, key)
-                else:
-                    with Image.open(ref) as im:
-                        feats = self.features(im.copy(), key)
-            else:
-                feats = self.features(ref, key)
-            yield self.inliers(q, feats)
+    def verify_multi(self, query_images: list[Any], pairs: list[tuple[int, str, Any]]) -> Any:
+        """Like ``verify_iter`` for several query images: each pair is (query index,
+        reference key, reference). Each query's features are extracted once, on first use."""
+        queries: dict[int, dict[str, Any]] = {}
+        for qi, key, ref in pairs:
+            if qi not in queries:
+                queries[qi] = self.features(query_images[qi])
+            yield self.inliers(queries[qi], self.reference_features(key, ref))
 
     def verify(self, query_image: Any, references: list[tuple[str, Any]]) -> list[dict[str, Any]]:
         """Inliers for each (cache key, PIL image or path) reference, plus timings."""

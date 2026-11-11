@@ -57,6 +57,17 @@ This is an engineering audit, not legal advice. **Rule:** a component marked *No
 | Geist fonts | SIL OFL 1.1 | Yes | **Removed** (replaced by Familjen Grotesk) | [vercel/geist-font](https://github.com/vercel/geist-font) |
 | Dev photo `commons-199099878` on the About page | CC BY-SA 4.0 (Bene Riobó, Wikimedia Commons) | Yes, with attribution and share-alike | Shown resized with credit | [Commons](https://commons.wikimedia.org/wiki/File:Citro%C3%ABn_Berlingo_Prim%C3%A4r.jpg) |
 
+### Person masks for automatic region search
+
+Used at query time only, to find the part of an uploaded photo that shows the place
+(`swespy/model/variants.py`, experiment 14). Masks are computed in memory and never stored.
+
+| Component | License | Commercial use | Decision | Source |
+| --- | --- | --- | --- | --- |
+| **torchvision DeepLabV3-MobileNetV3-Large**, weights `COCO_WITH_VOC_LABELS_V1` (`deeplabv3_mobilenet_v3_large-fc3c493d.pth`, SHA-256 `fc3c493d68e89cc31ef488c803d5d7dd2f3190fb570598faa49fef69be8e5e70`, pinned in code) | Code BSD-3-Clause. Weights: torchvision publishes them without a separate licence; trained on a subset of COCO train2017 restricted to the 20 VOC categories | Yes for the code. **Caveat:** COCO images are under various Flickr licences and the COCO terms do not explicitly cover trained weights; this is the common reading for torchvision's pretrained models, not a legal clearance | **Default** (class "person" only) | [pytorch/vision](https://github.com/pytorch/vision/blob/main/LICENSE), [model docs](https://pytorch.org/vision/stable/models/generated/torchvision.models.segmentation.deeplabv3_mobilenet_v3_large.html) |
+| Ultralytics YOLO segmentation | AGPL-3.0 (or paid licence) | Only under AGPL obligations | **Rejected:** copyleft for a network service | [ultralytics/ultralytics](https://github.com/ultralytics/ultralytics/blob/main/LICENSE) |
+| SegFormer (NVIDIA) weights | NVIDIA Source Code License (non-commercial) | **No** | **Rejected** | [NVlabs/SegFormer](https://github.com/NVlabs/SegFormer/blob/master/LICENSE) |
+
 ### Privacy (face / licence-plate blurring for self-collected images)
 
 | Component | License | Commercial use | Decision | Source |

@@ -121,5 +121,41 @@ async def test_real_stream_result_equals_predict_for_three_dev_photos(monkeypatc
             result = {k: v for k, v in events[-1].items() if k != "type"}
             for r in (result, plain):
                 r.pop("processing_time_ms")
+                r.pop("timings_ms")  # Measured per request.
             # One code path (locate_events) serves both routes, so they must agree exactly.
             assert result == plain, q["image_id"]
+
+
+@pytest.mark.skipif(not os.environ.get("SWESPY_RESTAURANT_PHOTO"),
+                    reason="Needs local weights, gallery and the restaurant photo (path in env)")
+async def test_restaurant_photo_reports_its_winning_variant(monkeypatch):
+    """The field case that motivated automatic regions: a person fills most of the frame.
+
+    The photo is read from the path in SWESPY_RESTAURANT_PHOTO and never copied; its
+    location is not checked here (see eval/auto_regions.py for the scored case).
+    """
+    raw = Path(os.environ["SWESPY_RESTAURANT_PHOTO"]).expanduser().read_bytes()
+    monkeypatch.chdir(REAL)
+    monkeypatch.setenv("TESTING", "false")
+    monkeypatch.setenv("API_RATE_LIMIT_PER_MINUTE", "1000")
+    from swespy.api.main import build_locator, create_app
+    from swespy.config import get_settings
+
+    get_settings.cache_clear()
+    application = create_app()
+    application.state.locator = build_locator(get_settings())
+    files = {"file": ("photo.heic", raw, "image/heic")}
+    async with AsyncClient(transport=ASGITransport(app=application), base_url="http://t") as c:
+        plain = (await c.post("/predict", files=files)).json()
+        events = lines((await c.post("/predict/stream", files=files)).content)
+        analysis = (await c.post("/analyze", files=files)).json()
+    result = {k: v for k, v in events[-1].items() if k != "type"}
+    for r in (result, plain):
+        r.pop("processing_time_ms")
+        r.pop("timings_ms")
+    assert result == plain
+    assert plain["person_share"] > 0.3 and analysis["suggest"]
+    assert plain["searched_variant"] in {v["id"] for v in plain["variants"]}
+    region = plain["searched_region"]
+    assert set(region) == {"x", "y", "width", "height"}
+    assert 0 <= region["x"] and region["x"] + region["width"] <= 1 + 1e-9

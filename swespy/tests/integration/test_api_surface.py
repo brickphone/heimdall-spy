@@ -88,3 +88,15 @@ async def test_predict_accepts_a_normalised_region(app):
         bad = await c.post("/predict", files={"file": ("x.png", png(), "image/png")},
                            data={"region": "not json"})
         assert bad.status_code == 400
+
+
+
+async def test_analyze_schema(app):
+    """POST /analyze: person share and suggested region, no retrieval."""
+    async with await client_for(app) as c:
+        response = await c.post("/analyze", files={"file": ("a.png", png(), "image/png")})
+        bad = await c.post("/analyze", files={"file": ("a.txt", b"x", "text/plain")})
+    assert response.status_code == 200
+    assert set(response.json()) == {"person_share", "suggested_region", "suggest", "variants",
+                                    "processing_time_ms"}
+    assert bad.status_code == 400

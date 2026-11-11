@@ -22,6 +22,7 @@ class MatchResult(BaseModel):
     capture_year: int | None = None
     inliers: int | None = None
     score: float | None = None
+    variant: str | None = None  # The search variant that retrieved this reference.
 
     @field_validator("similarity_score", mode="before")
     @classmethod
@@ -45,4 +46,23 @@ class PredictResponse(BaseModel):
     top_matches: list[MatchResult]
     processing_time_ms: float
     region: dict[str, float] | None = None
+    # Automatic region search: the variant whose verified match won ("whole", "manual",
+    # "masked" or "crop:<name>"), the part of the photo it covers (normalised), the share
+    # of the photo covered by people, and an alternative region to try.
+    searched_variant: str = "whole"
+    searched_region: dict[str, float] | None = None
+    person_share: float | None = None
+    alternative_region: dict[str, float] | None = None
+    variants: list[dict[str, Any]] = []
+    timings_ms: dict[str, float] = {}
     versions: dict[str, Any] = {}
+
+
+class AnalyzeResponse(BaseModel):
+    """People in the photo and the suggested region; no retrieval."""
+
+    person_share: float | None
+    suggested_region: dict[str, float] | None
+    suggest: bool  # People cover more than 30%: pre-draw the suggested region.
+    variants: list[dict[str, Any]]
+    processing_time_ms: float

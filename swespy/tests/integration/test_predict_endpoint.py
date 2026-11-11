@@ -42,7 +42,14 @@ async def test_predict_endpoint_schema() -> None:
         "processing_time_ms",
         "versions",
         "region",
+        "searched_variant",
+        "searched_region",
+        "person_share",
+        "alternative_region",
+        "variants",
+        "timings_ms",
     }
+    assert data["searched_variant"] == "whole"
     assert len(data["top_matches"]) == 5
     first = data["top_matches"][0]
     assert first["rank"] == 1

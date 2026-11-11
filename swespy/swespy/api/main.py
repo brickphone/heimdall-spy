@@ -44,7 +44,20 @@ class DummyLocator:
                  "similarity": 0.9, "creator": None, "source_url": None, "license_url": None}
                 for i in range(1, 6)
             ],
+            "searched_variant": "manual" if region else "whole",
+            "searched_region": region or {"x": 0.0, "y": 0.0, "width": 1.0, "height": 1.0},
+            "person_share": 0.0,
+            "alternative_region": {"x": 0.3, "y": 0.0, "width": 0.4, "height": 1.0},
+            "variants": [{"id": "manual" if region else "whole", "region": region,
+                          "top_similarity": 0.9}],
+            "timings_ms": {},
         }
+
+    def analyze_bytes(self, contents: bytes) -> dict[str, Any]:
+        _ = contents
+        return {"person_share": 0.0, "suggested_region": None, "suggest": False,
+                "variants": [{"id": "whole", "region": {"x": 0.0, "y": 0.0, "width": 1.0,
+                                                        "height": 1.0}}]}
 
     def locate_events(self, contents: bytes, region: dict[str, float] | None = None,
                       cancelled: Any = lambda: False) -> Any:
@@ -66,14 +79,21 @@ def build_locator(settings: Settings) -> Any:
 
     gallery = Gallery(Path(settings.gallery_index), settings.area_polygon)
     embedder = MegaLocEmbedder(Path(settings.megaloc_root), settings.megaloc_device)
+    segmenter = None
+    if settings.variants_mode != "whole":
+        from swespy.model.variants import PersonSegmenter
+
+        segmenter = PersonSegmenter(settings.segment_device)
+    variants = {"segmenter": segmenter, "variants_mode": settings.variants_mode}
     if not settings.rerank_enabled:
-        return GeoLocator(embedder, gallery, settings.top_k_results, settings.retrieval_depth)
+        return GeoLocator(embedder, gallery, settings.top_k_results, settings.retrieval_depth,
+                          **variants)
     from swespy.model import rerank as rr
 
     verifier = rr.GeometricVerifier(settings.rerank_device)
     return GeoLocator(embedder, gallery, settings.top_k_results, settings.retrieval_depth,
                       verifier=verifier, weight=rr.DEFAULT_WEIGHT,
-                      min_inliers=rr.DEFAULT_MIN_INLIERS, rerank_k=settings.rerank_k)
+                      min_inliers=rr.DEFAULT_MIN_INLIERS, rerank_k=settings.rerank_k, **variants)
 
 
 @asynccontextmanager
