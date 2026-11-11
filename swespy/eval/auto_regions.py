@@ -102,7 +102,8 @@ def build(mode: str) -> Any:
     from swespy.model.variants import PersonSegmenter
 
     s = get_settings()
-    gallery = Gallery(Path(s.gallery_index), s.area_polygon)
+    gallery = Gallery(Path(s.gallery_index), s.area_polygon, search=s.gallery_search,
+                      nprobe=s.gallery_nprobe, refine=s.gallery_refine)
     embedder = MegaLocEmbedder(Path(s.megaloc_root), s.megaloc_device)
     return GeoLocator(embedder, gallery, s.top_k_results, s.retrieval_depth,
                       verifier=rr.GeometricVerifier(s.rerank_device), weight=rr.DEFAULT_WEIGHT,
@@ -126,7 +127,7 @@ def row(result: dict[str, Any], lat: float, lng: float, seconds: float) -> dict[
     }
 
 
-def run(set_names: list[str], named: list[str]) -> Path:
+def run(set_names: list[str], named: list[str], resume: bool = False) -> Path:
     sets = {k: v for k, v in load_sets().items() if k in set_names}
     if named:
         sets["named"] = []
@@ -141,8 +142,9 @@ def run(set_names: list[str], named: list[str]) -> Path:
     path = OUT / "rows.json"
     saved = json.loads(path.read_text()) if path.exists() else {}
     # Rows of sets not being re-run are kept (e.g. field rows added later).
+    # With --resume, finished (photo, setup) pairs are kept and skipped.
     rows: dict[str, dict[str, Any]] = {k: v for k, v in saved.get("rows", {}).items()
-                                       if v["set"] not in sets}
+                                       if resume or v["set"] not in sets}
     locator = build("full")
 
     def save(status: str) -> None:
@@ -158,8 +160,10 @@ def run(set_names: list[str], named: list[str]) -> Path:
                 if problem:
                     save(f"stopped: {problem}")
                     raise SystemExit(f"Stopped: {problem}. Rows so far are in {path}.")
-                contents = Path(q["path"]).read_bytes()
                 key = f"{set_name}/{q['image_id']}"
+                if mode in rows.get(key, {}):
+                    continue
+                contents = Path(q["path"]).read_bytes()
                 rows.setdefault(key, {"set": set_name})
                 start = time.perf_counter()
                 result = locator.locate_bytes(contents)
@@ -172,7 +176,7 @@ def run(set_names: list[str], named: list[str]) -> Path:
                         **row(result, q["lat"], q["lng"], 0.0), "manual_region": manual}
                 print(mode, key, rows[key][mode]["variant"],
                       round(rows[key][mode]["error_m"]), rows[key][mode]["state"], flush=True)
-            save(f"running: {mode}/{set_name}")
+                save(f"running: {mode}/{set_name}")  # Checkpoint after every photo.
     save("complete")
     return path
 
@@ -258,9 +262,10 @@ def main() -> None:
     parser.add_argument("command", choices=("run", "summary"))
     parser.add_argument("--sets", default="dev,street", help="comma-separated: dev,street,field")
     parser.add_argument("--named", action="append", default=[])
+    parser.add_argument("--resume", action="store_true", help="skip finished photo/setup pairs")
     args = parser.parse_args()
     if args.command == "run":
-        print(run(args.sets.split(","), args.named))
+        print(run(args.sets.split(","), args.named, args.resume))
     print(json.dumps(summary(), indent=1))
 
 

@@ -13,6 +13,7 @@ WEB_PORT="${WEB_PORT:-3000}"
 export PYTORCH_ENABLE_MPS_FALLBACK=1
 export MEGALOC_DEVICE="${MEGALOC_DEVICE:-mps}" RERANK_DEVICE="${RERANK_DEVICE:-mps}"
 export RERANK_ENABLED=true TESTING=false
+export TORCH_HOME="${TORCH_HOME:-$PWD/data/torch}"  # Pinned ALIKED, LightGlue and person-mask weights.
 
 if [ ! -d web/node_modules ]; then
   (cd web && npm ci)
