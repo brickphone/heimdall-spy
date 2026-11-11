@@ -27,64 +27,128 @@ End-to-end (with the demo running): `node scripts/e2e.mjs <expected.json>`.
 
 ## What the page does ("Heimdall" workspace)
 
-A light, map-first workspace. All inference stays in FastAPI: the page calls only the
-public endpoints (`POST /predict`, `GET /references/{id}/image`, `GET /ready`).
+A light, map-first workspace. All inference stays in FastAPI; the page calls only the
+public endpoints (`POST /predict/stream`, `GET /references/{id}/image`).
 
-- **Layout (desktop, >= 1100 px):** rail (new search, recent searches for this session,
-  reference coverage, How it works), full-height MapLibre map, 420 px inspector.
-  **Mobile (375–430 px):** map on top with floating 44 px buttons, result in a bottom
-  sheet, compare full screen.
-- **Map:** OpenFreeMap vector tiles restyled from the design tokens (muted roads, pale
-  water, 2D buildings, district names), attribution "© OpenStreetMap contributors,
-  OpenFreeMap, © OpenMapTiles". Reference coverage: cobalt dots along streets that have a
-  reference within 25 m (`public/data/coverage.geojson`).
-- **Contour rings (uncertainty):** each candidate gets 3 rings whose spacing comes from one
-  documented function of its matching details (`src/lib/rings.ts`). The prediction is a
-  cobalt pin with solid rings; other candidates are numbered squares with wider dashed
-  rings. A callout with the place name and coordinates is joined to the selected point.
-- **Inspector:** file name and time, the photo with **Select region** (only the
-  highlighted part is searched; drag or use the arrow keys, Shift resizes), the state
-  line (Confident / Low confidence), place name, coordinates with Copy, one plain
-  reason built from the API data, **Other candidates** (synced with the map), and **Your
-  region and the match** (swipe compare with a keyboard slider and the credit line).
-- **Region:** `POST /predict` takes an optional form field `region` = JSON
-  `{"x","y","width","height"}` normalised to the upright photo; retrieval and re-ranking
-  both see only that part (`swespy/model/imageio.py:crop_region`, tested).
+### Flow: photo, region, then Locate
+
+1. **Choose or drop a photo:** use the button, or drop it anywhere on the map, which shows
+   a full-map "Drop to add photo" target. The photo appears with region selection active.
+   **Nothing is sent until Locate is pressed.**
+2. **Optionally drag a box** around the part that shows the place (keyboard: arrows move
+   it, Shift with arrows resizes). "Use whole photo" clears it.
+3. **Locate.** After a result, "Change region" lets you adjust the box and locate again.
+
+### The locating sequence (the map is the loading state)
+
+Driven by the streamed pipeline events, not by timers. Each phase holds a minimum time so
+fast answers still read clearly.
+
+| Event from `/predict/stream` | Map | Inspector |
+| --- | --- | --- |
+| Locate pressed (min 900 ms) | Dims (paper at 55%, soft vignette); frames the Linköping polygon, tilts to 35°, rotates about 4°/s. Centre label "Searching Linköping" with Cancel | Stage list: "Search reference photos" running |
+| `candidates` (top 50) | Rotation continues; 50 dots fade in, strongest first, over ~600 ms. Label: "Comparing the 5 closest matches" | Search done (seconds); "Compare closest matches" running |
+| `stage: verification` | Rotation stops; ~1.2 s flight to the top 5; the other 45 dots fade out; wide dashed rings | |
+| `verified` × 5 | Each candidate's rings ease to their final radius (500 ms): tight for strong matches, wide for weak | |
+| `result` | Dim lifts; flight to the best match at zoom 16, pitch 45°, 3D buildings; prediction rings draw in, inner to outer; callout fades in | Sections fill; the stage list collapses to "Located in 4.1 s" (expand for per-stage times) |
+
+- **Cancel:** aborts the request, which stops the work on the server; lifts the dim;
+  returns the camera; keeps the photo and region.
+- **Errors:** the label becomes the message plus "Try again".
+- **Reduced motion:** no flights or rotation (camera jumps), states crossfade, rings
+  appear at their final size.
+- **Candidate selection after the result:** flies between candidates at pitch 45° in
+  ~800 ms.
+
+**Reference coverage** is no longer in the workspace. It's a static, non-interactive map
+on `/about` with a sentence explaining it. The workspace never requests coverage or
+gallery points; the only reference image it loads is the matched one, in the compare
+view after a result.
+
+### Streaming API
+
+`POST /predict/stream` (same form fields as `/predict`) returns NDJSON
+(`application/x-ndjson`). Events, in order:
+- `{"type":"stage","stage":"retrieval"}`
+- `{"type":"candidates","items":[{id,lat,lng,similarity}×50]}`: locations only, never images or sources
+- `{"type":"stage","stage":"verification","count":5}`
+- `{"type":"verified","id","inliers","score"}`, one per candidate as it completes
+- `{"type":"result", …exactly /predict's response…}`
+- `{"type":"error","message"}` on failure
+
+How it's built and verified:
+- **One code path:** both routes run `GeoLocator.locate_events`; `/predict` returns its
+  final result, so the two cannot differ. On the running stack the streamed result was
+  byte-identical to `/predict` for 3 dev photos, and both match the frozen evaluation.
+- **Cancellation:** a client disconnect sets a flag the pipeline checks between steps
+  (tested: work stops within one step).
+- **Proxy:** the Next.js proxy passes the stream through unbuffered. Measured: candidates
+  at 1.3 s, each verification ~0.35 s apart, result at 4.2 s.
+
+### Region, place names, About
+
+- **Region:** the form field `region` = JSON `{"x","y","width","height"}`, normalised to
+  the upright photo; retrieval and re-ranking both see only that part.
 - **Place names:** offline reverse geocoding from OpenStreetMap street and district names
-  (`public/data/places.json`, generated by `scripts/build_web_data.py`).
-- **About page (`/about`):** what it does, how, the dev results with 95% intervals (read
-  from `eval/results/dev_historic_rerank.json` at build time by `web/scripts/prepare.mjs`),
-  failure modes with a real manual-crop example (all attempts recorded by
-  `scripts/crop_example.py`), data and licences, and what it does not do.
-- **Not in this design:** the earlier "save this photo for later evaluation" option. The
-  `POST /field-photos` endpoint is unchanged.
+  (`public/data/places.json`).
+- **About:** the dev results with 95% intervals, read from
+  `eval/results/dev_historic_rerank.json` at build time; the coverage map; failure modes
+  with a real manual-crop example; data and licences.
 
-### Checks (2026-11-10)
+### Checks (2026-11-11)
 
 | Check | Result |
 | --- | --- |
-| Playwright, 1440×900 and 390×844 (`web/scripts/e2e.mjs`) | 24 / 24 |
-| API-equals: UI top 5, details and state = eval, 3 dev photos | pass (2 Confident, 1 Low confidence) |
-| Keyboard: Tab reaches every action; Enter selects candidates (list and map); arrows move the region and the compare divider | pass |
-| Focus ring | 2 px solid cobalt, 2 px offset (computed style checked) |
-| Contrast (`npm run check:contrast`), 23 pairs | all pass WCAG AA (lowest 4.55:1, street names) |
-| Off-token values (`npm run check:tokens`) | none |
-| Type check, lint | clean |
+| Python suites | 173 + 178 passed |
+| Stream tests | order and schema; same result as `/predict`; disconnect cancels work (`tests/integration/test_predict_stream.py`) |
+| Real model, 3 dev photos | stream result = `/predict`, exactly |
+| Playwright (`web/scripts/e2e.mjs`), 1440×900 and 390×844 | 32 / 33 |
+| Nothing sent before Locate; region active by default; drawn region sent | pass |
+| Status label follows the stream; "Located in …" with stage timings | pass |
+| API-equals: UI top 5, details and state = eval, 3 dev photos | pass |
+| Cancel mid-verification (photo and region kept, Locate offered); error label with Try again | pass |
+| Network: no coverage or gallery-point requests in the workspace | pass |
+| Keyboard; focus ring 2 px cobalt, 2 px offset; contrast; tokens; type check; lint | pass |
+| **Frame budget: no long task > 100 ms** | **Not fully met**, see below |
+
+**Frame budget on the M1.**
+- With screenshots off, most runs have no long task at all. About 1 run in 9 has a single
+  frame of 109–181 ms, always while the API is still computing.
+- The API's feature extractor (ALIKED) runs on the same Apple GPU that renders the map, so
+  that is likely contention, though not proven.
+- Seen once: one 95 ms frame at Locate, when the tilted camera loads many tiles.
+- Hiding labels while the map is dimmed did not remove the slow frames; the label hiding
+  was kept.
+- Moving verification to the CPU would avoid the overlap but makes that step about 4×
+  slower.
 
 ### Screenshots
 
-| Desktop 1440×900 | |
-| --- | --- |
-| Empty state, coverage on | ![](screenshots/desktop-1-empty.png) |
-| Result (Confident) | ![](screenshots/desktop-2-result.png) |
-| Region selected | ![](screenshots/desktop-3-region.png) |
-| Candidate 3 selected (list and map) | ![](screenshots/desktop-4-candidate3.png) |
-| Compare | ![](screenshots/desktop-5-compare.png) |
-| How it works (`/about`) | ![](screenshots/desktop-6-about.png) |
+**Locating sequence** (1440×900, fixed times after Locate):
 
-| Mobile 390×844 | | |
-| --- | --- | --- |
-| ![](screenshots/mobile-1-empty.png) | ![](screenshots/mobile-2-result.png) | ![](screenshots/mobile-3-compare.png) |
+| | |
+| --- | --- |
+| ![](screenshots/sequence-01-0.3s.png) 0.3 s | ![](screenshots/sequence-02-0.9s.png) 0.9 s |
+| ![](screenshots/sequence-03-1.5s.png) 1.5 s | ![](screenshots/sequence-04-2.1s.png) 2.1 s |
+| ![](screenshots/sequence-05-2.7s.png) 2.7 s | ![](screenshots/sequence-06-3.3s.png) 3.3 s |
+| ![](screenshots/sequence-07-4.0s.png) 4.0 s | ![](screenshots/sequence-08-4.8s.png) 4.8 s |
+| ![](screenshots/sequence-09-5.8s.png) 5.8 s | ![](screenshots/sequence-10-7.5s.png) 7.5 s |
+
+**Other states:**
+
+| | |
+| --- | --- |
+| Empty state (polygon outline, no coverage) | ![](screenshots/desktop-1-empty.png) |
+| Photo chosen, region active, Locate | ![](screenshots/desktop-2-ready.png) |
+| Result | ![](screenshots/desktop-3-result.png) |
+| Result with a drawn region | ![](screenshots/desktop-4-region-result.png) |
+| Candidate 3 selected | ![](screenshots/desktop-5-candidate3.png) |
+| Compare | ![](screenshots/desktop-6-compare.png) |
+| Cancel during verification: before / after | ![](screenshots/cancel-1-before.png) ![](screenshots/cancel-2-after.png) |
+| Error | ![](screenshots/error.png) |
+| Reduced motion | ![](screenshots/reduced-1.png) ![](screenshots/reduced-2.png) ![](screenshots/reduced-3-result.png) |
+| About, with the coverage map | ![](screenshots/desktop-7-about.png) |
+| Mobile 390×844 | ![](screenshots/mobile-1-empty.png) ![](screenshots/mobile-2-result.png) ![](screenshots/mobile-3-compare.png) |
 
 ## Privacy
 
