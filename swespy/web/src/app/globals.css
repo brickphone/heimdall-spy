@@ -1,52 +1,155 @@
 @import "tailwindcss";
 
-:root {
-  --background: #f6f7f9;
-  --foreground: #1b2430;
-  --card: #ffffff;
-  --line: #dde2e8;
-  --muted: #5b6675;
-  --accent: #1d5fbf;
-  --ok: #1f7a45;
-  --low: #a05f00;
-  --on-solid: #ffffff;
+/*
+ * Heimdall design tokens: the only place colours, type sizes, radii and fixed sizes are
+ * defined. Components use these through Tailwind classes (bg-paper, text-ink-2,
+ * rounded-control, w-rail, ...) or var(--…); scripts/check-tokens.mjs fails on any
+ * hex colour or px radius outside this file. `static` keeps every token in the CSS,
+ * including the map colours that only JavaScript reads.
+ */
+@theme static {
+  --color-*: initial;
+  --color-paper: #f3f5f4;
+  --color-surface: #ffffff;
+  --color-ink: #16212c;
+  --color-ink-2: #5b6872;
+  --color-ink-map: #46535d;
+  --color-rule: #d3dad8;
+  --color-rule-control: #cdd5d3;
+  --color-rule-list: #ebefee;
+  --color-pin: #2047c9;
+  --color-pin-hover: #16337f;
+  --color-sure: #1d7457;
+  --color-unsure: #8f5a0d;
+  --color-danger: #b42318;
+  --color-selected: #eef2fc;
+  --color-scrim: rgb(22 33 44 / 0.45);
+  --color-transparent: transparent;
+
+  /* Map style (read by src/lib/mapStyle.ts). */
+  --color-map-land: #f3f5f4;
+  --color-map-landuse: #ecefee;
+  --color-map-park: #e2ebe4;
+  --color-map-forest: #d9e4db;
+  --color-map-water: #cadbe1;
+  --color-map-road: #ffffff;
+  --color-map-minor-casing: #d2d9d7;
+  --color-map-major-casing: #bcc6c4;
+  --color-map-path: #aab5b3;
+  --color-map-building: #dfe4e2;
+  --color-map-building-line: #c8d0ce;
+  --color-map-rail: #9da8a6;
+  --color-map-label: #46535d;
+  --color-map-street-label: #6a7880;
+  --color-map-water-label: #4f6e7a;
+
+  --font-sans: var(--font-familjen), ui-sans-serif, system-ui, sans-serif;
+
+  --text-*: initial;
+  --text-map: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-control: 14px;
+  --text-body: 15px;
+  --text-md: 16px;
+  --text-lg: 22px;
+  --text-xl: 28px;
+  --text-xl--letter-spacing: -0.01em;
+
+  --radius-*: initial;
+  --radius-none: 0;
+  --radius-control: 4px;
+  --radius-square: 2px;
+  --radius-sheet: 10px;
+  --radius-dot: 50%;
+
+  --spacing-rail: 56px;
+  --spacing-inspector: 420px;
+  --spacing-photo: 276px;
+  --spacing-touch: 44px;
+  --spacing-handle: 30px;
+  --spacing-map-mobile: 430px;
+  --spacing-icon: 20px;
+  --spacing-state: 10px;
+
+  --breakpoint-desk: 1100px;
 }
 
-@media (prefers-color-scheme: dark) {
+:root {
+  /* Non-Tailwind tokens used directly with var(). */
+  --border: 1px;
+  --focus-width: 2px;
+  --focus-offset: 2px;
+  --ring-1: 1.4px;
+  --ring-2: 1.1px;
+  --ring-3: 0.9px;
+  --pin-size: 11px;
+  --pin-halo: 2.5px;
+  --square-size: 18px;
+  --callout-border: 0.9px;
+  --divider-width: 2px;
+  --halo-district: 3.5px;
+  --icon-stroke: 1.4;
+  --duration-ease: 450ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
   :root {
-    --background: #12161b;
-    --foreground: #e6eaef;
-    --card: #1b2129;
-    --line: #2e3742;
-    --muted: #9aa5b1;
-    --accent: #7fb0ff;
-    --ok: #5cc98a;
-    --low: #f2c26b;
-    --on-solid: #0b1220;
+    --duration-ease: 0ms;
   }
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-line: var(--line);
-  --color-muted: var(--muted);
-  --color-accent: var(--accent);
-  --color-ok: var(--ok);
-  --color-low: var(--low);
-  --color-on-solid: var(--on-solid);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  font-feature-settings: "tnum";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* One visible focus ring everywhere: 2px cobalt, 2px offset. */
+:focus-visible {
+  outline: var(--focus-width) solid var(--color-pin);
+  outline-offset: var(--focus-offset);
 }
 
 a {
-  color: var(--accent);
+  color: var(--color-pin);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+a:hover {
+  color: var(--color-pin-hover);
+}
+
+/* MapLibre controls restyled to the tokens. */
+.maplibregl-ctrl-scale {
+  border: var(--border) solid var(--color-ink-map);
+  border-top: none;
+  background: transparent;
+  color: var(--color-ink-map);
+  font-size: var(--text-map);
+  font-family: var(--font-sans);
+  font-feature-settings: "tnum";
+}
+
+.maplibregl-ctrl-attrib {
+  background: var(--color-surface);
+  font-size: var(--text-map);
+  color: var(--color-ink-map);
+}
+
+.maplibregl-ctrl-attrib a {
+  color: var(--color-ink-map);
+}
+
+.maplibregl-canvas:focus-visible {
+  outline-offset: calc(var(--focus-width) * -1);
 }

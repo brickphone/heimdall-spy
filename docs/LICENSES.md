@@ -44,10 +44,18 @@ This is an engineering audit, not legal advice. **Rule:** a component marked *No
 | --- | --- | --- | --- | --- |
 | Next.js 16.4.5, React 19.3 | MIT | Yes | In use | [vercel/next.js](https://github.com/vercel/next.js) |
 | Tailwind CSS 4 | MIT | Yes | In use | [tailwindlabs/tailwindcss](https://github.com/tailwindlabs/tailwindcss) |
-| Leaflet 1.9.4 | BSD-2-Clause | Yes | In use (plain Leaflet) | [Leaflet/Leaflet](https://github.com/Leaflet/Leaflet) |
+| MapLibre GL JS 6.17.0 | BSD-3-Clause | Yes | In use (map renderer; worker served from `public/maplibre/`) | [maplibre/maplibre-gl-js](https://github.com/maplibre/maplibre-gl-js) |
+| OpenFreeMap vector tiles and glyphs | Free service, no key; data ODbL | Yes | In use; attribution shown on the map | [openfreemap.org](https://openfreemap.org) |
+| OpenMapTiles schema (tile layout) | CC BY 4.0 (schema), BSD-3 (code) | Yes, with attribution | Credited on the map ("© OpenMapTiles") | [openmaptiles.org](https://openmaptiles.org/) |
+| OpenStreetMap data (map, street and district names) | ODbL 1.0 | Yes, with attribution | "© OpenStreetMap contributors" on the map and About page | [osm.org/copyright](https://www.openstreetmap.org/copyright) |
+| Radix UI primitives (dialog, tooltip, toggle), unstyled | MIT | Yes | In use | [radix-ui/primitives](https://github.com/radix-ui/primitives) |
+| Familjen Grotesk (via `next/font`, self-hosted at build) | SIL OFL 1.1 | Yes | In use (UI type) | [Google Fonts](https://fonts.google.com/specimen/Familjen+Grotesk) |
+| Noto Sans (map label glyphs from OpenFreeMap) | SIL OFL 1.1 | Yes | In use inside the map canvas only | [notofonts](https://github.com/notofonts) |
+| playwright-core 1.65 (dev only, drives the installed Chrome) | Apache-2.0 | Yes | Tests only | [microsoft/playwright](https://github.com/microsoft/playwright) |
+| Leaflet 1.9.4 | BSD-2-Clause | Yes | **Removed** (replaced by MapLibre) | [Leaflet/Leaflet](https://github.com/Leaflet/Leaflet) |
 | react-leaflet 5 | Hippocratic-2.1 (not OSI; use restrictions) | Unclear | **Rejected** | [PaulLeCam/react-leaflet](https://github.com/PaulLeCam/react-leaflet) |
-| Geist fonts (via `next/font`, self-hosted at build) | SIL OFL 1.1 | Yes | In use | [vercel/geist-font](https://github.com/vercel/geist-font) |
-| OpenStreetMap tiles | ODbL data; tile usage policy | Light use only | Demo only; attribution shown. Heavy or public use needs another tile provider | [OSM tile policy](https://operations.osmfoundation.org/policies/tiles/) |
+| Geist fonts | SIL OFL 1.1 | Yes | **Removed** (replaced by Familjen Grotesk) | [vercel/geist-font](https://github.com/vercel/geist-font) |
+| Dev photo `commons-199099878` on the About page | CC BY-SA 4.0 (Bene Riobó, Wikimedia Commons) | Yes, with attribution and share-alike | Shown resized with credit | [Commons](https://commons.wikimedia.org/wiki/File:Citro%C3%ABn_Berlingo_Prim%C3%A4r.jpg) |
 
 ### Privacy (face / licence-plate blurring for self-collected images)
 

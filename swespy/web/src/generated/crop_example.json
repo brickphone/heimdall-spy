@@ -1,0 +1,66 @@
+{
+ "attempts": [
+  {
+   "image_id": "commons-199099878",
+   "label": "whole photo",
+   "region": null,
+   "error_m": 536,
+   "state": "low",
+   "top_inliers": 13
+  },
+  {
+   "image_id": "commons-199099878",
+   "label": "the brick building behind the van",
+   "region": {
+    "x": 0.0,
+    "y": 0.0,
+    "width": 0.4,
+    "height": 0.45
+   },
+   "error_m": 1931,
+   "state": "low",
+   "top_inliers": 17
+  },
+  {
+   "image_id": "commons-199596662",
+   "label": "whole photo",
+   "region": null,
+   "error_m": 2831,
+   "state": "low",
+   "top_inliers": 14
+  },
+  {
+   "image_id": "commons-199596662",
+   "label": "the station building",
+   "region": {
+    "x": 0.0,
+    "y": 0.18,
+    "width": 0.26,
+    "height": 0.55
+   },
+   "error_m": 3538,
+   "state": "low",
+   "top_inliers": 13
+  },
+  {
+   "image_id": "commons-199596662",
+   "label": "building, flags and trees",
+   "region": {
+    "x": 0.0,
+    "y": 0.08,
+    "width": 0.75,
+    "height": 0.42
+   },
+   "error_m": 2831,
+   "state": "low",
+   "top_inliers": 15
+  }
+ ],
+ "shown": "commons-199099878",
+ "photo": {
+  "file": "/about/commons-199099878.jpg",
+  "creator": "Bene Riobó",
+  "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+  "source_url": "https://commons.wikimedia.org/wiki/File:Citro%C3%ABn_Berlingo_Prim%C3%A4r.jpg"
+ }
+}

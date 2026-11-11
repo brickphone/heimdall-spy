@@ -15,37 +15,76 @@ background, waits until its `/ready` answers (~70 s), then starts the web server
 | Process | Address | What it does |
 | --- | --- | --- |
 | API (FastAPI/uvicorn) | 127.0.0.1:8000 | All inference. Loads model and gallery once (~60 s; prints nothing until `Application startup complete`) |
-| Web (Next.js 16, TypeScript, Tailwind 4, Leaflet) | 127.0.0.1:3000 | Long-running Node server (`output: "standalone"`, `node server.js`). Serves the page and forwards `/api/*` unchanged to the API. No API routes, server actions or serverless functions |
+| Web (Next.js 16, TypeScript, Tailwind 4, MapLibre GL) | 127.0.0.1:3000 | Long-running Node server (`output: "standalone"`, `node server.js`). Serves the page and forwards `/api/*` unchanged to the API. No API routes, server actions or serverless functions |
 
-The page shows "Waiting for the API…" and keeps Locate disabled until `GET /ready` says
-the model is loaded. MegaLoc and ALIKED run on the Apple GPU (LightGlue on CPU), with
-re-ranking on (K = 5, 1,024 keypoints). Measured: **3–6 s per photo**.
+The web server starts once the API's `/ready` answers. MegaLoc and ALIKED run on the
+Apple GPU (LightGlue on CPU), with re-ranking on (K = 5, 1,024 keypoints). Measured:
+**3–6 s per photo**.
 
 Web development: `cd web && npm run dev` (hot reload on 127.0.0.1:3000, API still needed).
-Checks: `npm run typecheck && npm run lint`.
+Checks: `npm run typecheck && npm run lint && npm run check:tokens && npm run check:contrast`.
+End-to-end (with the demo running): `node scripts/e2e.mjs <expected.json>`.
 
-## What the page does
+## What the page does ("Heimdall" workspace)
 
-- Upload a JPEG, PNG or HEIC photo. The page calls the public `POST /predict`, exactly
-  as any client would; there is no demo-specific inference logic. Code:
-  `swespy/web/src/components/Demo.tsx`, `ResultMap.tsx`, `src/lib/api.ts` (types mirror
-  `swespy/api/schemas.py`).
-- **Map** (Leaflet + OpenStreetMap): the predicted location is the main pin;
-  candidates 2–5 are small pins with their inlier counts.
-- **Confidence label:** "Confident" or "Low confidence", with the reason (too few
-  inliers, or another verified candidate far away). On the dev set, "confident" was
-  right within 500 m for 92% of photos and "low" for 21%.
-- **Matched reference** next to your photo, with credit: source link (Mapillary /
-  Wikimedia Commons / KartaView), contributor, licence (e.g. CC BY-SA 4.0) and
-  "resized". `GET /references/{image_id}/image` serves only images in the loaded
-  gallery, looked up by ID.
-- **Processing time** (server and round trip) and the **versions** block: MegaLoc
-  revision and weights hash, gallery file, stage and index hash, re-ranking settings.
-- **"Save this photo for later evaluation"** (off by default): after the result, click
-  the map at the true location and press Save. The page then calls `POST /field-photos`,
-  which writes `data/field_photos/<time>-<hash>/photo.jpg` (pixels only, no EXIF/GPS)
-  and `record.json` (true location, prediction, versions). Field photos are a future
-  evaluation set only: never added to the gallery, dev set or any tuning.
+A light, map-first workspace. All inference stays in FastAPI: the page calls only the
+public endpoints (`POST /predict`, `GET /references/{id}/image`, `GET /ready`).
+
+- **Layout (desktop, >= 1100 px):** rail (new search, recent searches for this session,
+  reference coverage, How it works), full-height MapLibre map, 420 px inspector.
+  **Mobile (375–430 px):** map on top with floating 44 px buttons, result in a bottom
+  sheet, compare full screen.
+- **Map:** OpenFreeMap vector tiles restyled from the design tokens (muted roads, pale
+  water, 2D buildings, district names), attribution "© OpenStreetMap contributors,
+  OpenFreeMap, © OpenMapTiles". Reference coverage: cobalt dots along streets that have a
+  reference within 25 m (`public/data/coverage.geojson`).
+- **Contour rings (uncertainty):** each candidate gets 3 rings whose spacing comes from one
+  documented function of its matching details (`src/lib/rings.ts`). The prediction is a
+  cobalt pin with solid rings; other candidates are numbered squares with wider dashed
+  rings. A callout with the place name and coordinates is joined to the selected point.
+- **Inspector:** file name and time, the photo with **Select region** (only the
+  highlighted part is searched; drag or use the arrow keys, Shift resizes), the state
+  line (Confident / Low confidence), place name, coordinates with Copy, one plain
+  reason built from the API data, **Other candidates** (synced with the map), and **Your
+  region and the match** (swipe compare with a keyboard slider and the credit line).
+- **Region:** `POST /predict` takes an optional form field `region` = JSON
+  `{"x","y","width","height"}` normalised to the upright photo; retrieval and re-ranking
+  both see only that part (`swespy/model/imageio.py:crop_region`, tested).
+- **Place names:** offline reverse geocoding from OpenStreetMap street and district names
+  (`public/data/places.json`, generated by `scripts/build_web_data.py`).
+- **About page (`/about`):** what it does, how, the dev results with 95% intervals (read
+  from `eval/results/dev_historic_rerank.json` at build time by `web/scripts/prepare.mjs`),
+  failure modes with a real manual-crop example (all attempts recorded by
+  `scripts/crop_example.py`), data and licences, and what it does not do.
+- **Not in this design:** the earlier "save this photo for later evaluation" option. The
+  `POST /field-photos` endpoint is unchanged.
+
+### Checks (2026-11-10)
+
+| Check | Result |
+| --- | --- |
+| Playwright, 1440×900 and 390×844 (`web/scripts/e2e.mjs`) | 24 / 24 |
+| API-equals: UI top 5, details and state = eval, 3 dev photos | pass (2 Confident, 1 Low confidence) |
+| Keyboard: Tab reaches every action; Enter selects candidates (list and map); arrows move the region and the compare divider | pass |
+| Focus ring | 2 px solid cobalt, 2 px offset (computed style checked) |
+| Contrast (`npm run check:contrast`), 23 pairs | all pass WCAG AA (lowest 4.55:1, street names) |
+| Off-token values (`npm run check:tokens`) | none |
+| Type check, lint | clean |
+
+### Screenshots
+
+| Desktop 1440×900 | |
+| --- | --- |
+| Empty state, coverage on | ![](screenshots/desktop-1-empty.png) |
+| Result (Confident) | ![](screenshots/desktop-2-result.png) |
+| Region selected | ![](screenshots/desktop-3-region.png) |
+| Candidate 3 selected (list and map) | ![](screenshots/desktop-4-candidate3.png) |
+| Compare | ![](screenshots/desktop-5-compare.png) |
+| How it works (`/about`) | ![](screenshots/desktop-6-about.png) |
+
+| Mobile 390×844 | | |
+| --- | --- | --- |
+| ![](screenshots/mobile-1-empty.png) | ![](screenshots/mobile-2-result.png) | ![](screenshots/mobile-3-compare.png) |
 
 ## Privacy
 

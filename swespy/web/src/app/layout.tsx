@@ -1,29 +1,28 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Familjen_Grotesk } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+// One family, three weights. latin covers å, ä and ö; latin-ext covers other European names.
+const familjen = Familjen_Grotesk({
+  variable: "--font-familjen",
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "500", "600"],
 });
 
 export const metadata: Metadata = {
-  title: "Heimdall demo",
-  description: "Locate a photo taken in Linköping",
+  title: "Heimdall",
+  description: "Find where a photo taken in Linköping was taken, with an honest confidence state.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+    <html lang="en" className={`${familjen.variable} h-full`}>
+      <body className="h-full">{children}</body>
     </html>
   );
 }
