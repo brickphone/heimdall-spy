@@ -9,8 +9,11 @@ Mattis Hüttenrauch on 2026-11-09. Mandatory rules that follow from it, enforced
   is always shown as ``ATTRIBUTION``.
 - Every pull is logged (``PullLog``), without keys, image data or URLs.
 - Street View data is a retrieval index only: never training, fine-tuning or pair mining.
-- At most ``MONTHLY_IMAGE_CAP`` image requests per billing month unless the owner
-  explicitly approves paid usage. Metadata requests are free and not capped.
+- Billable caps (owner decision 2026-11-10), enforced by ``Budget`` from a reservation
+  journal written *before* each billable request is sent (crash-safe):
+  Street View tiles at most ``TILE_DAILY_CAP`` per Pacific day and ``TILE_TOTAL_CAP``
+  across all runs; Static API images at most ``MONTHLY_IMAGE_CAP`` per billing month.
+  Uncharged requests (session, panoIds, metadata) are logged but never counted.
 
 The API key comes from the environment (``GOOGLE_MAPS_API_KEY``) or the macOS Keychain
 (service ``google_maps_key``). It is never stored in the repo, printed or logged, and
@@ -24,6 +27,7 @@ import logging
 import os
 import re
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -35,16 +39,20 @@ SOURCE = "gsv"
 KEY_ENV = "GOOGLE_MAPS_API_KEY"
 KEYCHAIN_SERVICE = "google_maps_key"
 MONTHLY_IMAGE_CAP = 9_500
-# Billable request types and their monthly caps. Street View tiles (Map Tiles API) are a
-# separate SKU; they stay at 0 (not allowed) until the owner approves a tile cap.
-MONTHLY_CAPS = {"image": MONTHLY_IMAGE_CAP, "tile": 0}
+TILE_DAILY_CAP = 14_500  # Below Google's 15,000/day quota; days reset at midnight Pacific.
+TILE_TOTAL_CAP = 220_000
+# Monthly caps by billable type ("tile" has no monthly cap; see Budget for its caps).
+MONTHLY_CAPS = {"image": MONTHLY_IMAGE_CAP, "tile": TILE_TOTAL_CAP}
+UNCHARGED = ("session", "panoids", "metadata")
 # Google Maps Platform billing months follow Pacific Time, so the cap does too.
 BILLING_TZ = ZoneInfo("America/Los_Angeles")
 METADATA_URL = "https://maps.googleapis.com/maps/api/streetview/metadata"
-# Google-captured panoramas (car, trekker, on-foot) carry "© Google"; user-contributed
-# photospheres carry the contributor's name instead.
-GOOGLE_COPYRIGHT = re.compile(r"^©\s*(\d{4}\s+)?Google( LLC)?$")
-REQUEST_TYPES = ("metadata", "image", "tile")
+# Google-captured panoramas (car, trekker, on-foot) carry "© Google" (Static API) or
+# "From the Owner, Photo by: Google" (Map Tiles API); user-contributed photospheres carry
+# the contributor's name instead.
+GOOGLE_COPYRIGHT = re.compile(
+    r"^(©\s*(\d{4}\s+)?Google( LLC)?|(From the Owner, )?Photo by: Google( LLC)?)$")
+REQUEST_TYPES = ("session", "panoids", "metadata", "image", "tile")
 PULL_LOG_FIELDS = (
     "utc", "bbox", "request_type", "request_count", "success_count",
     "cumulative_month", "priority",
@@ -92,6 +100,10 @@ def is_google_captured(copyright_text: str | None) -> bool:
 
 def billing_month(now: datetime | None = None) -> str:
     return (now or datetime.now(UTC)).astimezone(BILLING_TZ).strftime("%Y-%m")
+
+
+def billing_day(now: datetime | None = None) -> str:
+    return (now or datetime.now(UTC)).astimezone(BILLING_TZ).strftime("%Y-%m-%d")
 
 
 def redact(text: str, key: str) -> str:
@@ -159,6 +171,73 @@ class PullLog:
         with self.path.open("a") as f:
             f.write(json.dumps(row) + "\n")
         return row
+
+
+class Budget:
+    """Crash-safe billable-request budget.
+
+    Every billable request is reserved with ``take`` *before* it is sent; the reservation
+    is appended to a journal immediately, and the budget is always computed from that
+    journal. A crash can therefore only over-count (never under-count) what was sent.
+    """
+
+    def __init__(self, journal: Path, now: Callable[[], datetime] | None = None):
+        import threading
+
+        self.journal = journal
+        self.now = now or (lambda: datetime.now(UTC))
+        self.lock = threading.Lock()
+        self.tiles_by_day: dict[str, int] = {}
+        self.tiles_total = 0
+        self.images_by_month: dict[str, int] = {}
+        if journal.exists():
+            for line in journal.read_text().splitlines():
+                if line:
+                    r = json.loads(line)
+                    self._add(r["type"], r["n"], datetime.fromisoformat(r["utc"]))
+
+    def _add(self, kind: str, n: int, when: datetime) -> None:
+        if kind == "tile":
+            day = billing_day(when)
+            self.tiles_by_day[day] = self.tiles_by_day.get(day, 0) + n
+            self.tiles_total += n
+        elif kind == "image":
+            month = billing_month(when)
+            self.images_by_month[month] = self.images_by_month.get(month, 0) + n
+        else:
+            raise ValueError(f"{kind} requests are not billable")
+
+    def remaining(self, kind: str) -> int:
+        now = self.now()
+        if kind == "tile":
+            return max(0, min(TILE_DAILY_CAP - self.tiles_by_day.get(billing_day(now), 0),
+                              TILE_TOTAL_CAP - self.tiles_total))
+        if kind == "image":
+            return max(0, MONTHLY_IMAGE_CAP - self.images_by_month.get(billing_month(now), 0))
+        raise ValueError(f"{kind} requests are not billable")
+
+    def take(self, kind: str, n: int = 1) -> bool:
+        """Reserve ``n`` billable requests; False (nothing reserved) if a cap would be hit."""
+        with self.lock:
+            if n > self.remaining(kind):
+                return False
+            when = self.now()
+            self.journal.parent.mkdir(parents=True, exist_ok=True)
+            with self.journal.open("a") as f:
+                f.write(json.dumps({"utc": when.astimezone(UTC).isoformat(), "type": kind,
+                                    "n": int(n)}) + "\n")
+                f.flush()
+                os.fsync(f.fileno())
+            self._add(kind, n, when)
+            return True
+
+    def summary(self) -> dict[str, Any]:
+        now = self.now()
+        return {"tiles_today": self.tiles_by_day.get(billing_day(now), 0),
+                "tiles_total": self.tiles_total,
+                "tiles_total_remaining": TILE_TOTAL_CAP - self.tiles_total,
+                "static_this_month": self.images_by_month.get(billing_month(now), 0),
+                "billing_day_pacific": billing_day(now)}
 
 
 def candidate_label(meta: dict[str, Any]) -> dict[str, Any]:

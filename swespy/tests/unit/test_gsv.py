@@ -66,6 +66,8 @@ def test_metadata_dedup_by_pano_id_and_copyright_filter():
     assert plan.merge_panos(panos, p1, {"status": "ZERO_RESULTS"}) == "zero_results"
     assert set(panos) == {"P1"}
     assert gsv.is_google_captured("© 2024 Google")
+    assert gsv.is_google_captured("From the Owner, Photo by: Google")  # Map Tiles API.
+    assert not gsv.is_google_captured("From the Owner, Photo by: Anna Svensson")
     assert not gsv.is_google_captured("© Googleplex fan")
     assert not gsv.is_google_captured(None)
 
@@ -103,8 +105,6 @@ def test_monthly_cap_allows_exactly_one_more_at_9499(tmp_path):
         log.reserve(1, now=now)
     next_month = datetime(2026, 12, 2, 12, tzinfo=UTC)
     assert log.remaining_images(now=next_month) == gsv.MONTHLY_IMAGE_CAP
-    with pytest.raises(gsv.CapReached):  # Tiles are not approved yet.
-        log.reserve(1, "tile", now=now)
     with pytest.raises(ValueError):
         log.reserve(1, "metadata", now=now)
 

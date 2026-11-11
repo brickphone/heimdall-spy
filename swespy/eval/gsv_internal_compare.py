@@ -22,6 +22,8 @@ from swespy import gsv
 
 PILOT = Path("data/gsv_internal/gsv_internal_pilot")
 OFFICIAL_LOG = Path("data/gsv/pull_log.jsonl")
+JOURNAL = Path("data/gsv/billable_journal.jsonl")  # Same crash-safe budget as the build.
+N_TILE_CHECK = 3  # Also render this many of the views from official Map Tiles API tiles.
 STATIC_URL = "https://maps.googleapis.com/maps/api/streetview"
 N_VIEWS = 50
 SEED = 20261110
@@ -55,7 +57,9 @@ def main() -> None:
     views, desc = pilot_views()
     picks = choose(views)
     log = gsv.PullLog(OFFICIAL_LOG)
-    log.reserve(len(picks), "image")  # Raises before any request if the cap would be crossed.
+    budget = gsv.Budget(JOURNAL)
+    if not budget.take("image", len(picks)):  # Reserved before any request is sent.
+        raise gsv.CapReached("Static cap would be crossed")
     lats = [views[i]["lat"] for i in picks]
     lngs = [views[i]["lng"] for i in picks]
     bbox = (min(lngs), min(lats), max(lngs), max(lats))
@@ -99,6 +103,8 @@ def main() -> None:
                priority=None)
     official = embedder.batch_images(images) if images else np.zeros((0, desc.shape[1]))
     del images
+    tile_check = official_tiles_check(key, budget, log, views, desc, official, kept,
+                                      embedder.batch_images)
     pilot = desc[kept]
     pilot /= np.linalg.norm(pilot, axis=1, keepdims=True)
     same = np.sum(official * pilot, axis=1)
@@ -124,12 +130,53 @@ def main() -> None:
                                "max": float(np.max(other_pano))},
         "official_view_retrieves_its_pilot_view_top1": f"{rank1}/{len(kept)}",
         "failures": [m for m in official_meta if m.get("status") != "OK" or "image" in m],
-        "used_this_month": log.used_this_month("image"),
+        "official_tiles_check": tile_check,
+        "budget": budget.summary(),
         "cap": gsv.MONTHLY_IMAGE_CAP,
     }
     (Path("data/gsv_internal") / "official_comparison.json").write_text(
         json.dumps(result, indent=1))
     print(json.dumps(result, indent=1))
+
+
+def official_tiles_check(key: str, budget: gsv.Budget, log: gsv.PullLog,
+                         views: list[dict[str, Any]], desc: np.ndarray, official: np.ndarray,
+                         kept: list[int], embed: Any) -> list[dict[str, Any]]:
+    """Render N_TILE_CHECK views from official Map Tiles API tiles; compare all three."""
+    from PIL import Image
+
+    from eval import gsv_build as b
+
+    api = b.Api(key, budget)
+    logs = b.LogBuffer(log, api)
+    api.create_session()
+    out = []
+    try:
+        for j, i in enumerate(kept[:N_TILE_CHECK]):
+            v = views[i]
+            meta = api.metadata(v["pano_id"])
+            pano = {"pano_id": v["pano_id"], "heading": float(meta.get("heading", 0.0)),
+                    "image_w": int(meta["imageWidth"]), "image_h": int(meta["imageHeight"]),
+                    "tile_w": int(meta.get("tileWidth", 512)),
+                    "tile_h": int(meta.get("tileHeight", 512))}
+            n = len(b.tiles_needed(pano, [v["heading"]]))
+            if not budget.take("tile", n):
+                break
+            from concurrent.futures import ThreadPoolExecutor
+
+            with ThreadPoolExecutor(8) as pool:
+                [(_, view)] = b.fetch_tiles_views(api, pano, [v["heading"]], pool)
+            t = embed([Image.fromarray(view)])[0]
+            del view
+            pilot = desc[i] / np.linalg.norm(desc[i])
+            out.append({"pano_id": v["pano_id"], "tiles": n,
+                        "official_heading": pano["heading"],
+                        "cos_official_tiles_vs_pilot": float(t @ pilot),
+                        "cos_official_tiles_vs_static": float(t @ official[j]),
+                        "cos_static_vs_pilot": float(official[j] @ pilot)})
+    finally:
+        logs.flush()
+    return out
 
 
 if __name__ == "__main__":
