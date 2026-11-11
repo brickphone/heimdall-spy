@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from loguru import logger
 
 from swespy.api.schemas import MatchResult, PredictResponse
@@ -15,8 +16,16 @@ router = APIRouter(tags=["predict"])
 
 
 @router.post("/predict", response_model=PredictResponse)
-async def predict(request: Request, file: UploadFile = File(...)) -> PredictResponse:
-    """Locate an uploaded image. The upload is processed in memory and never stored."""
+async def predict(
+    request: Request,
+    file: UploadFile = File(...),  # noqa: B008
+    region: str | None = Form(None),
+) -> PredictResponse:
+    """Locate an uploaded image. The upload is processed in memory and never stored.
+
+    ``region`` (optional): JSON {"x", "y", "width", "height"} normalised to the upright
+    photo; only that part is searched.
+    """
     allowed_types = request.app.state.allowed_image_types
     max_file_bytes = request.app.state.max_upload_size_mb * 1024 * 1024
 
@@ -27,9 +36,16 @@ async def predict(request: Request, file: UploadFile = File(...)) -> PredictResp
     if len(contents) > max_file_bytes:
         raise HTTPException(status_code=400, detail="File exceeds 10MB limit")
 
+    selected = None
+    if region:
+        try:
+            selected = json.loads(region)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="Region must be JSON") from exc
     start = time.perf_counter()
     try:
-        result = await asyncio.to_thread(request.app.state.locator.locate_bytes, contents)
+        result = await asyncio.to_thread(request.app.state.locator.locate_bytes, contents,
+                                         selected)
     except UnsupportedImage as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     elapsed_ms = (time.perf_counter() - start) * 1000
@@ -53,5 +69,6 @@ async def predict(request: Request, file: UploadFile = File(...)) -> PredictResp
             for c in result["candidates"]
         ],
         processing_time_ms=elapsed_ms,
+        region=selected,
         versions=request.app.state.locator.versions(),
     )

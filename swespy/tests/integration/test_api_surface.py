@@ -77,3 +77,14 @@ async def test_unknown_reference_is_404(app):
     async with await client_for(app) as c:
         assert (await c.get("/references/../../etc/passwd/image")).status_code == 404
         assert (await c.get("/references/nope/image")).status_code == 404
+
+
+async def test_predict_accepts_a_normalised_region(app):
+    region = json.dumps({"x": 0.1, "y": 0.1, "width": 0.5, "height": 0.6})
+    async with await client_for(app) as c:
+        ok = await c.post("/predict", files={"file": ("x.png", png(), "image/png")},
+                          data={"region": region})
+        assert ok.status_code == 200 and ok.json()["region"]["width"] == 0.5
+        bad = await c.post("/predict", files={"file": ("x.png", png(), "image/png")},
+                           data={"region": "not json"})
+        assert bad.status_code == 400

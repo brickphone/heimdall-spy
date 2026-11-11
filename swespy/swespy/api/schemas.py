@@ -44,4 +44,5 @@ class PredictResponse(BaseModel):
     confidence_reasons: list[str] = []
     top_matches: list[MatchResult]
     processing_time_ms: float
+    region: dict[str, float] | None = None
     versions: dict[str, Any] = {}

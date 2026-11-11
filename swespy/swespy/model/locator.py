@@ -168,12 +168,16 @@ class GeoLocator:
             "ranked_similarities": sims,
         }
 
-    def locate_bytes(self, contents: bytes) -> dict[str, Any]:
-        """Locate an uploaded image held only in memory (re-ranked if a verifier is set)."""
-        from swespy.model.imageio import decode_upload
+    def locate_bytes(self, contents: bytes,
+                     region: dict[str, float] | None = None) -> dict[str, Any]:
+        """Locate an uploaded image held only in memory (re-ranked if a verifier is set).
+
+        ``region`` (normalised x, y, width, height) restricts both stages to that part.
+        """
+        from swespy.model.imageio import crop_region, decode_upload
 
         # One decode for both stages: upright RGB pixels only, no EXIF/GPS metadata.
-        image = decode_upload(contents)
+        image = crop_region(decode_upload(contents), region)
         result = self.locate_vector(self.embedder.embed_image(image))
         if self.verifier is None:
             return result

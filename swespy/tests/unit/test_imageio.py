@@ -72,3 +72,18 @@ def test_heic_without_extra_is_a_clear_error(monkeypatch):
 def test_garbage_is_rejected():
     with pytest.raises(imageio.UnsupportedImage):
         imageio.decode_upload(b"not an image")
+
+
+def test_crop_region_normalised_and_validated():
+    from swespy.model.imageio import UnsupportedImage, crop_region
+
+    img = Image.new("RGB", (1000, 800))
+    out = crop_region(img, {"x": 0.1, "y": 0.25, "width": 0.5, "height": 0.5})
+    assert out.size == (500, 400)
+    assert crop_region(img, None) is img
+    for bad in ({"x": 0.9, "y": 0, "width": 0.5, "height": 0.5},
+                {"x": 0, "y": 0, "width": 0.01, "height": 0.5},
+                {"x": -0.1, "y": 0, "width": 0.5, "height": 0.5},
+                {"y": 0, "width": 0.5, "height": 0.5}):
+        with pytest.raises(UnsupportedImage):
+            crop_region(img, bad)

@@ -41,6 +41,7 @@ async def test_predict_endpoint_schema() -> None:
         "top_matches",
         "processing_time_ms",
         "versions",
+        "region",
     }
     assert len(data["top_matches"]) == 5
     first = data["top_matches"][0]

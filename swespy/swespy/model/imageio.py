@@ -54,3 +54,30 @@ def decode_upload(contents: bytes) -> Image.Image:
     clean = Image.new("RGB", rgb.size)
     clean.paste(rgb)
     return clean
+
+
+MIN_REGION_FRACTION = 0.05  # Each side at least 5% of the photo.
+MIN_REGION_PX = 64
+
+
+def crop_region(image: Image.Image, region: dict[str, float] | None) -> Image.Image:
+    """Crop to a normalised region {x, y, width, height} of the upright photo (0..1).
+
+    Used when the user selects the part of the photo that shows the place; retrieval and
+    re-ranking then both see only that part. Raises UnsupportedImage on an invalid region.
+    """
+    if region is None:
+        return image
+    try:
+        x, y = float(region["x"]), float(region["y"])
+        w, h = float(region["width"]), float(region["height"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise UnsupportedImage("Region must have x, y, width and height") from exc
+    if not (0 <= x < 1 and 0 <= y < 1 and w >= MIN_REGION_FRACTION
+            and h >= MIN_REGION_FRACTION and x + w <= 1 + 1e-6 and y + h <= 1 + 1e-6):
+        raise UnsupportedImage("Region must lie inside the photo and cover at least 5% per side")
+    W, H = image.size
+    box = (round(x * W), round(y * H), round(min(1.0, x + w) * W), round(min(1.0, y + h) * H))
+    if box[2] - box[0] < MIN_REGION_PX or box[3] - box[1] < MIN_REGION_PX:
+        raise UnsupportedImage(f"Region is too small (at least {MIN_REGION_PX} px per side)")
+    return image.crop(box)

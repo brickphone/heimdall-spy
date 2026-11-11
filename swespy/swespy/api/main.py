@@ -30,8 +30,9 @@ class DummyLocator:
     def versions(self) -> dict[str, Any]:
         return {"model": {"name": "dummy"}, "gallery": {"file": None}, "rerank": {}}
 
-    def locate_bytes(self, contents: bytes) -> dict[str, Any]:
-        _ = contents
+    def locate_bytes(self, contents: bytes,
+                     region: dict[str, float] | None = None) -> dict[str, Any]:
+        _ = contents, region
         return {
             "predicted_lat": 58.4108, "predicted_lng": 15.6214,
             "prediction_method": "top-ranked reference", "confidence": 0.9,
