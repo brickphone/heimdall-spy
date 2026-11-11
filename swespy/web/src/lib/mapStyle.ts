@@ -95,7 +95,37 @@ export function mapStyle(): StyleSpecification {
         source: "omt",
         "source-layer": "building",
         minzoom: 13,
+        maxzoom: 15,
         paint: { "fill-color": c("building"), "fill-outline-color": c("building-line") },
+      },
+      // 3D buildings from OpenFreeMap heights, only at zoom >= 15. MapLibre shades one
+      // colour per extrusion, so walls use the side colour and a thin cap on top of each
+      // building carries the roof colour.
+      {
+        id: "building-3d",
+        type: "fill-extrusion",
+        source: "omt",
+        "source-layer": "building",
+        minzoom: 15,
+        paint: {
+          "fill-extrusion-color": c("building-side"),
+          "fill-extrusion-height": ["coalesce", ["get", "render_height"], 6],
+          "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
+          "fill-extrusion-vertical-gradient": false,
+        },
+      },
+      {
+        id: "building-3d-roof",
+        type: "fill-extrusion",
+        source: "omt",
+        "source-layer": "building",
+        minzoom: 15,
+        paint: {
+          "fill-extrusion-color": c("building-top"),
+          "fill-extrusion-height": ["+", ["coalesce", ["get", "render_height"], 6], 0.3],
+          "fill-extrusion-base": ["coalesce", ["get", "render_height"], 6],
+          "fill-extrusion-vertical-gradient": false,
+        },
       },
       {
         id: "path",

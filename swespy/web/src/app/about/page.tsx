@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import CoverageMap from "@/components/CoverageMap";
 import { LogoMark } from "@/components/Icons";
 import about from "@/generated/about.json";
 import crop from "@/generated/crop_example.json";
@@ -67,6 +68,14 @@ export default function About() {
             Mapillary, {num(sources.wikimedia_commons ?? 0)} from Wikimedia Commons and{" "}
             {num(sources.kartaview ?? 0)} from KartaView.
           </P>
+          <figure className="flex max-w-prose flex-col gap-2">
+            <CoverageMap area={about.areaPolygon as [number, number][]} />
+            <figcaption className="text-sm text-ink-2">
+              Streets with at least one reference photo within 25 m are dotted; the outline is
+              the area Heimdall covers. Where there are no dots, the library has no photo to
+              compare with, so a photo taken there cannot be located well.
+            </figcaption>
+          </figure>
           <P>
             <strong className="font-semibold">Retrieval.</strong> A neural network (MegaLoc) turns
             your photo into a compact description of what it shows and finds the reference photos

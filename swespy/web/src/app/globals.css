@@ -42,6 +42,8 @@
   --color-map-label: #46535d;
   --color-map-street-label: #6a7880;
   --color-map-water-label: #4f6e7a;
+  --color-map-building-side: #e3e8e6;
+  --color-map-building-top: #d5dcda;
 
   --font-sans: var(--font-familjen), ui-sans-serif, system-ui, sans-serif;
 
@@ -91,6 +93,8 @@
   --halo-district: 3.5px;
   --icon-stroke: 1.4;
   --duration-ease: 450ms;
+  --dim-opacity: 0.55;
+  --vignette: color-mix(in srgb, var(--color-ink) 16%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {

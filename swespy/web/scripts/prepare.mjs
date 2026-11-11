@@ -38,6 +38,7 @@ const about = {
   minInliers: dev.rerank.min_inliers,
   rerankK: dev.rerank.k,
   references: lib.references,
+  areaPolygon: lib.area_polygon,
   bySource: lib.by_source,
 };
 

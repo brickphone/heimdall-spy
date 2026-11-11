@@ -3,27 +3,19 @@
 /* eslint-disable @next/next/no-img-element -- local blob thumbnails */
 
 import * as Dialog from "@radix-ui/react-dialog";
-import * as Toggle from "@radix-ui/react-toggle";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import Link from "next/link";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import Compare from "@/components/Compare";
-import {
-  IconBack,
-  IconClose,
-  IconCoverage,
-  IconHelp,
-  IconNew,
-  IconRecent,
-  LogoMark,
-} from "@/components/Icons";
-import MapView, { type MapItem } from "@/components/MapView";
+import { IconBack, IconClose, IconHelp, IconNew, IconRecent, LogoMark } from "@/components/Icons";
+import LocatingMap, { type LocatingMapHandle, type MapItem } from "@/components/LocatingMap";
 import PhotoRegion from "@/components/PhotoRegion";
-import { type Prediction, type Region, UserFacingError, checkFile, predict } from "@/lib/api";
+import { type Prediction, type Region, UserFacingError, checkFile } from "@/lib/api";
 import { distanceM, formatCoords, formatDistance, plainCoords } from "@/lib/geo";
 import { type Place, loadPlaces, lookup, placeLabel } from "@/lib/places";
 import { reasonText } from "@/lib/reason";
+import { type CandidatePoint, type StreamEvent, locateStream } from "@/lib/stream";
 
 interface Search {
   id: number;
@@ -32,66 +24,58 @@ interface Search {
   region: Region | null;
   prediction: Prediction;
   places: Place[];
+  timings: Timings;
 }
 
-type Status =
+/** Seconds per stage, measured from the arrival of the stream events. */
+interface Timings {
+  search: number | null;
+  compare: number | null;
+  check: number | null;
+}
+
+type StageKey = keyof Timings;
+type StageState = "pending" | "active" | "done";
+
+type Phase =
   | { kind: "empty" }
-  | { kind: "searching"; started: number }
+  | { kind: "ready" } // Photo chosen, nothing sent yet.
+  | { kind: "locating"; stage: StageKey; label: string }
   | { kind: "error"; message: string }
   | { kind: "done" };
 
-const DEFAULT_REGION: Region = { x: 0.2, y: 0.2, width: 0.6, height: 0.6 };
-const REGION_DEBOUNCE_MS = 400;
+const STAGES: { key: StageKey; label: string }[] = [
+  { key: "search", label: "Search reference photos" },
+  { key: "compare", label: "Compare closest matches" },
+  { key: "check", label: "Check confidence" },
+];
 
-function useElapsed(started: number | null): number {
-  // The clock is only read in the timer, never during render (prerendering forbids it).
-  const [now, setNow] = useState(0);
-  useEffect(() => {
-    if (started === null) return;
-    const t = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(t);
-  }, [started]);
-  return started === null || now < started ? 0 : (now - started) / 1000;
-}
+// Minimum time each phase stays on screen, so fast answers still read clearly (ms).
+const HOLD = { begin: 900, candidates: 1000, verification: 1200, verified: 180 } as const;
+const HOLD_REDUCED = { begin: 250, candidates: 250, verification: 250, verified: 60 } as const;
 
-export default function Workspace({ references }: { references: number }) {
+const reducedMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+export default function Workspace({ references, area }: { references: number; area: [number, number][] }) {
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState<string | null>(null);
   const [region, setRegion] = useState<Region | null>(null);
-  const [regionMode, setRegionMode] = useState(false);
+  const [editing, setEditing] = useState(true);
   const [noPreview, setNoPreview] = useState(false);
-  const [status, setStatus] = useState<Status>({ kind: "empty" });
+  const [phase, setPhase] = useState<Phase>({ kind: "empty" });
   const [result, setResult] = useState<Search | null>(null);
   const [selected, setSelected] = useState(0);
-  const [coverage, setCoverage] = useState(true);
   const [recent, setRecent] = useState<Search[]>([]);
   const [compareOpen, setCompareOpen] = useState(false);
-  const request = useRef(0);
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const elapsed = useElapsed(status.kind === "searching" ? status.started : null);
+  const [timings, setTimings] = useState<Timings>({ search: null, compare: null, check: null });
+  const [emptyError, setEmptyError] = useState<string | null>(null);
+  const mapRef = useRef<LocatingMapHandle>(null);
+  const abort = useRef<AbortController | null>(null);
+  const runId = useRef(0);
 
-  const run = useCallback(async (f: File, u: string, r: Region | null) => {
-    const id = ++request.current;
-    setStatus({ kind: "searching", started: Date.now() });
-    try {
-      const [prediction, places] = await Promise.all([predict(f, r), loadPlaces()]);
-      if (id !== request.current) return;
-      const at = [
-        { lat: prediction.predicted_lat, lng: prediction.predicted_lng },
-        ...prediction.top_matches.slice(1),
-      ];
-      const search: Search = { id, file: f, url: u, region: r, prediction, places: at.map((p) => lookup(places, p)) };
-      setResult(search);
-      setSelected(0);
-      setCoverage(false);
-      setStatus({ kind: "done" });
-      setRecent((list) => [search, ...list.filter((s) => s.url !== u || s.region !== r)].slice(0, 12));
-    } catch (err) {
-      if (id !== request.current) return;
-      const message =
-        err instanceof UserFacingError ? err.message : "Something went wrong while searching. Try again.";
-      setStatus({ kind: "error", message });
-    }
+  useEffect(() => {
+    void loadPlaces(); // Warm the place-name index while the user picks a photo.
   }, []);
 
   function choose(f: File | null) {
@@ -99,111 +83,231 @@ export default function Workspace({ references }: { references: number }) {
     try {
       checkFile(f);
     } catch (err) {
-      setStatus({ kind: "error", message: (err as Error).message });
+      setEmptyError((err as Error).message);
+      if (!file) setPhase({ kind: "empty" });
       return;
     }
-    const u = URL.createObjectURL(f);
+    stopRun();
+    mapRef.current?.reset();
+    setEmptyError(null);
     setFile(f);
-    setUrl(u);
+    setUrl(URL.createObjectURL(f));
     setRegion(null);
-    setRegionMode(false);
+    setEditing(true);
     setNoPreview(false);
     setResult(null);
-    void run(f, u, null);
+    setPhase({ kind: "ready" });
+  }
+
+  function stopRun() {
+    runId.current++;
+    abort.current?.abort();
+    abort.current = null;
   }
 
   function reset() {
-    request.current++;
+    stopRun();
+    mapRef.current?.reset();
     setFile(null);
     setUrl(null);
     setRegion(null);
-    setRegionMode(false);
     setResult(null);
-    setStatus({ kind: "empty" });
-    setCoverage(true);
+    setEmptyError(null);
+    setPhase({ kind: "empty" });
   }
 
-  function changeRegion(r: Region | null) {
-    setRegion(r);
+  function cancel() {
+    stopRun();
+    mapRef.current?.cancel();
+    if (result) {
+      // A re-run was cancelled: keep the previous answer on the map.
+      mapRef.current?.result(mapItems(result), result.prediction.confidence_state);
+      setTimings(result.timings);
+      setPhase({ kind: "done" });
+    } else {
+      setPhase({ kind: "ready" });
+    }
+    setEditing(true);
+  }
+
+  /** Locate: stream events into a queue and play them, each phase held long enough. */
+  async function locate() {
     if (!file || !url) return;
-    if (debounce.current) clearTimeout(debounce.current);
-    debounce.current = setTimeout(() => void run(file, url, r), REGION_DEBOUNCE_MS);
+    stopRun();
+    const id = runId.current;
+    const controller = new AbortController();
+    abort.current = controller;
+    const live = () => id === runId.current;
+    const hold = reducedMotion() ? HOLD_REDUCED : HOLD;
+    const t0 = performance.now();
+    const arrived: Record<string, number> = {};
+    const queue: StreamEvent[] = [];
+    let wake: (() => void) | null = null;
+    let finished = false;
+    let failure: string | null = null;
+
+    setEditing(false);
+    setTimings({ search: null, compare: null, check: null });
+    setPhase({ kind: "locating", stage: "search", label: "Searching Linköping" });
+    mapRef.current?.begin();
+
+    const fetching = locateStream(file, region, controller.signal, (ev) => {
+      const now = performance.now();
+      if (ev.type === "candidates") arrived.candidates = now;
+      if (ev.type === "verified") arrived.verified = now;
+      if (ev.type === "result") arrived.result = now;
+      queue.push(ev);
+      wake?.();
+    })
+      .catch((err) => {
+        if (!controller.signal.aborted) {
+          failure = err instanceof UserFacingError ? err.message : "Something went wrong while locating. Try again.";
+        }
+      })
+      .finally(() => {
+        finished = true;
+        wake?.();
+      });
+
+    let nextAt = performance.now() + hold.begin;
+    let top: CandidatePoint[] = [];
+    let candidates: CandidatePoint[] = [];
+    const places = loadPlaces();
+    while (live()) {
+      if (!queue.length) {
+        if (finished) break;
+        await new Promise<void>((r) => (wake = r));
+        wake = null;
+        continue;
+      }
+      const wait = nextAt - performance.now();
+      if (wait > 0) await sleep(wait);
+      if (!live()) return;
+      const ev = queue.shift()!;
+      if (ev.type === "candidates") {
+        candidates = ev.items;
+        setTimings((t) => ({ ...t, search: (arrived.candidates - t0) / 1000 }));
+        setPhase({ kind: "locating", stage: "compare", label: "Comparing the 5 closest matches" });
+        mapRef.current?.candidates(ev.items);
+        nextAt = performance.now() + hold.candidates;
+      } else if (ev.type === "stage" && ev.stage === "verification") {
+        top = candidates.slice(0, ev.count);
+        setPhase({ kind: "locating", stage: "compare", label: `Comparing the ${ev.count} closest matches` });
+        mapRef.current?.verifying(top);
+        nextAt = performance.now() + hold.verification;
+      } else if (ev.type === "verified") {
+        mapRef.current?.verified(ev.id, ev.inliers);
+        nextAt = performance.now() + hold.verified;
+      } else if (ev.type === "result") {
+        const prediction: Prediction = ev;
+        const lastVerified = arrived.verified ?? arrived.candidates;
+        const done: Timings = {
+          search: (arrived.candidates - t0) / 1000,
+          compare: (lastVerified - arrived.candidates) / 1000,
+          check: (arrived.result - lastVerified) / 1000,
+        };
+        setTimings(done);
+        setPhase({ kind: "locating", stage: "check", label: "Checking confidence" });
+        const index = await places;
+        if (!live()) return;
+        const at = [{ lat: prediction.predicted_lat, lng: prediction.predicted_lng }, ...prediction.top_matches.slice(1)];
+        const search: Search = { id, file, url, region, prediction, places: at.map((p) => lookup(index, p)), timings: done };
+        mapRef.current?.result(mapItems(search), prediction.confidence_state);
+        setResult(search);
+        setSelected(0);
+        setPhase({ kind: "done" });
+        setRecent((list) => [search, ...list].slice(0, 12));
+        abort.current = null;
+        return;
+      } else if (ev.type === "error") {
+        failure = ev.message;
+        break;
+      }
+    }
+    await fetching;
+    if (!live()) return;
+    mapRef.current?.fail();
+    setPhase({ kind: "error", message: failure ?? "The search ended without a result. Try again." });
   }
 
   function restore(s: Search) {
-    request.current++;
+    stopRun();
     setFile(s.file);
     setUrl(s.url);
     setRegion(s.region);
-    setRegionMode(Boolean(s.region));
+    setEditing(false);
     setResult(s);
+    setTimings(s.timings);
     setSelected(0);
-    setStatus({ kind: "done" });
+    setPhase({ kind: "done" });
+    mapRef.current?.result(mapItems(s), s.prediction.confidence_state);
   }
 
-  const items: MapItem[] = useMemo(() => {
-    if (!result) return [];
-    const p = result.prediction;
-    const top = p.top_matches[0];
-    return [
-      { index: 0, rank: 1, at: { lat: p.predicted_lat, lng: p.predicted_lng }, inliers: top?.inliers ?? null, label: placeLabel(result.places[0]) },
-      ...p.top_matches.slice(1).map((m, i) => ({
-        index: i + 1, rank: m.rank, at: { lat: m.lat, lng: m.lng }, inliers: m.inliers, label: placeLabel(result.places[i + 1]),
-      })),
-    ];
-  }, [result]);
+  function selectCandidate(index: number) {
+    setSelected(index);
+    mapRef.current?.select(index);
+  }
 
-  const searching = status.kind === "searching";
-  const photo = (
+  const locating = phase.kind === "locating";
+  const status =
+    phase.kind === "locating" ? (
+      <StatusLabel text={phase.label} onCancel={cancel} />
+    ) : phase.kind === "error" ? (
+      <StatusLabel text={phase.message} error onRetry={() => void locate()} />
+    ) : null;
+
+  const stageState = (key: StageKey): StageState => {
+    if (timings[key] !== null) return "done";
+    if (phase.kind === "locating" && phase.stage === key) return "active";
+    return "pending";
+  };
+
+  const photo = file && (
     <PhotoSection
       url={url}
       region={region}
-      regionMode={regionMode}
+      editing={editing && !locating}
       noPreview={noPreview}
-      onRegionMode={(on) => {
-        setRegionMode(on);
-        if (on && !region) changeRegion(DEFAULT_REGION);
-      }}
-      onWhole={() => {
-        setRegionMode(false);
-        changeRegion(null);
-      }}
-      onRegion={changeRegion}
+      hasResult={Boolean(result)}
+      locating={locating}
+      onRegion={setRegion}
+      onWhole={() => setRegion(null)}
+      onChangeRegion={() => setEditing(true)}
+      onLocate={() => void locate()}
       onUnavailable={() => {
         setNoPreview(true);
-        setRegionMode(false);
+        setEditing(false);
       }}
     />
   );
 
-  const progress = searching && (
-    <p className="text-sm text-ink-2" role="status" aria-live="polite">
-      Searching {references.toLocaleString("en-US")} reference photos and checking the closest
-      matches. {elapsed.toFixed(0)} s
-    </p>
-  );
-  const error = status.kind === "error" && (
-    <div role="alert" className="flex flex-col gap-3">
-      <p className="text-body text-danger">{status.message}</p>
-      {file && (
-        <button type="button" onClick={reset} className="self-start rounded-control border border-rule-control px-3 py-2 text-control text-ink hover:bg-paper">
-          Choose another photo
-        </button>
-      )}
-    </div>
+  // The stage list is shown while locating (and after an error); with a result it
+  // collapses into the "Located in" line in the header.
+  const stages = file && (locating || phase.kind === "error") && (
+    <Section>
+      <StageList state={stageState} timings={timings} />
+    </Section>
   );
 
-  const resultSections = result && (
-    <>
-      <ResultSection search={result} />
-      <Candidates search={result} selected={selected} onSelect={setSelected} />
-    </>
+  const results = result && (
+    <div className={`desk:contents ${locating ? "pointer-events-none opacity-40" : ""}`} inert={locating}>
+      <div className="hidden desk:contents">
+        <ResultSection search={result} />
+        <Candidates search={result} selected={selected} onSelect={selectCandidate} />
+        <Section title="Your region and the match">
+          <CompareFor search={result} selected={selected} />
+        </Section>
+      </div>
+      <div className="desk:hidden">
+        <MobileResult search={result} onCompare={() => setCompareOpen(true)} />
+        <Candidates search={result} selected={selected} onSelect={selectCandidate} />
+      </div>
+    </div>
   );
 
   return (
     <Tooltip.Provider delayDuration={300}>
       <div className="flex h-full flex-col desk:grid desk:grid-cols-[var(--spacing-rail)_1fr_var(--spacing-inspector)]">
-        {/* Rail (desktop) */}
         <nav aria-label="Workspace" className="hidden flex-col items-center gap-2 border-r border-rule bg-surface py-4 desk:flex">
           <div className="mb-4" title="Heimdall">
             <LogoMark />
@@ -212,9 +316,6 @@ export default function Workspace({ references }: { references: number }) {
             <IconNew />
           </RailButton>
           <RecentSearches recent={recent} onRestore={restore} />
-          <RailButton label={coverage ? "Hide reference coverage" : "Show reference coverage"} pressed={coverage} onClick={() => setCoverage((c) => !c)}>
-            <IconCoverage />
-          </RailButton>
           <div className="mt-auto">
             <Tooltip.Root>
               <Tooltip.Trigger asChild>
@@ -227,78 +328,54 @@ export default function Workspace({ references }: { references: number }) {
           </div>
         </nav>
 
-        {/* Map */}
         <div className="relative h-map-mobile shrink-0 desk:h-full">
-          <MapView
-            prediction={result?.prediction ?? null}
-            items={items}
-            selected={selected}
-            onSelect={setSelected}
-            coverage={coverage}
-            onCoverage={setCoverage}
+          <LocatingMap
+            ref={mapRef}
+            area={area}
+            dimmed={locating}
+            status={status}
+            onSelect={selectCandidate}
+            onDropFile={choose}
           />
-          <div className="absolute bottom-10 left-3 flex gap-2 desk:hidden">
-            {status.kind !== "empty" && (
-              <button type="button" onClick={reset} aria-label="New photo" className="grid size-touch place-items-center rounded-control border border-rule-control bg-surface text-ink">
-                <IconBack />
-              </button>
-            )}
-            <Toggle.Root
-              pressed={coverage}
-              onPressedChange={setCoverage}
-              aria-label="Reference coverage"
-              className="grid size-touch place-items-center rounded-control border border-rule-control bg-surface text-ink data-[state=on]:border-ink data-[state=on]:bg-ink data-[state=on]:text-surface"
+          {phase.kind !== "empty" && (
+            <button
+              type="button"
+              onClick={reset}
+              aria-label="New photo"
+              className="absolute bottom-10 left-3 grid size-touch place-items-center rounded-control border border-rule-control bg-surface text-ink desk:hidden"
             >
-              <IconCoverage />
-            </Toggle.Root>
-          </div>
+              <IconBack />
+            </button>
+          )}
         </div>
 
-        {/* Inspector (desktop) / bottom sheet (mobile) */}
         <aside
           aria-label="Inspector"
           className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto rounded-t-sheet border-t border-rule bg-surface desk:rounded-none desk:border-l desk:border-t-0"
         >
           <span className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-control bg-rule desk:hidden" aria-hidden="true" />
-          {(status.kind === "empty" || (status.kind === "error" && !file)) && (
-            <EmptyState references={references} onFile={choose} error={status.kind === "error" ? status.message : null} />
-          )}
-          {status.kind !== "empty" && file && (
+          {!file && <EmptyState references={references} onFile={choose} error={emptyError} />}
+          {file && (
             <>
               <Section>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h1 className="truncate text-body font-semibold text-ink">{file?.name ?? "Photo"}</h1>
-                    <p className="text-sm text-ink-2">
-                      {searching ? "Locating…" : result ? `Located in ${(result.prediction.processing_time_ms / 1000).toFixed(1)} s` : ""}
-                    </p>
+                    <h1 className="truncate text-body font-semibold text-ink">{file.name}</h1>
+                    <LocatedLine phase={phase} timings={timings} hasResult={Boolean(result)} />
                   </div>
                   <button type="button" onClick={reset} className="shrink-0 rounded-control border border-rule-control px-3 py-2 text-control text-ink hover:bg-paper">
                     New photo
                   </button>
                 </div>
               </Section>
-              <div className="hidden desk:block">{photo}</div>
-              {(progress || error) && <Section>{progress}{error}</Section>}
-              {result && (
-                <>
-                  <div className="hidden desk:contents">{resultSections}</div>
-                  <MobileResult search={result} onCompare={() => setCompareOpen(true)} />
-                  <div className="desk:hidden">
-                    <Candidates search={result} selected={selected} onSelect={setSelected} />
-                    {photo}
-                  </div>
-                  <Section title="Your region and the match" className="hidden desk:flex">
-                    <CompareFor search={result} selected={selected} />
-                  </Section>
-                </>
-              )}
+              {photo}
+              {stages}
+              {results}
             </>
           )}
         </aside>
       </div>
 
-      {/* Full-screen compare on mobile */}
       <Dialog.Root open={compareOpen} onOpenChange={setCompareOpen}>
         <Dialog.Portal>
           <Dialog.Content className="fixed inset-0 z-50 flex flex-col gap-4 bg-surface p-4" aria-describedby={undefined}>
@@ -316,6 +393,17 @@ export default function Workspace({ references }: { references: number }) {
   );
 }
 
+function mapItems(s: Search): MapItem[] {
+  const p = s.prediction;
+  const top = p.top_matches[0];
+  return [
+    { index: 0, rank: 1, at: { lat: p.predicted_lat, lng: p.predicted_lng }, inliers: top?.inliers ?? null, label: placeLabel(s.places[0]) },
+    ...p.top_matches.slice(1).map((m, i) => ({
+      index: i + 1, rank: m.rank, at: { lat: m.lat, lng: m.lng }, inliers: m.inliers, label: placeLabel(s.places[i + 1]),
+    })),
+  ];
+}
+
 // ---------------------------------------------------------------- pieces
 
 function Section({ title, children, className = "" }: { title?: string; children: ReactNode; className?: string }) {
@@ -324,6 +412,73 @@ function Section({ title, children, className = "" }: { title?: string; children
       {title && <h2 className="text-sm font-medium text-ink-2">{title}</h2>}
       {children}
     </section>
+  );
+}
+
+function ProgressArc() {
+  return (
+    <svg viewBox="0 0 12 12" className="size-3 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true">
+      <circle cx="6" cy="6" r="4.5" fill="none" stroke="var(--color-rule)" strokeWidth="1.4" />
+      <path d="M6 1.5a4.5 4.5 0 0 1 4.5 4.5" fill="none" stroke="var(--color-pin)" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function StatusLabel({ text, error, onCancel, onRetry }: { text: string; error?: boolean; onCancel?: () => void; onRetry?: () => void }) {
+  return (
+    <div role="status" aria-live="polite" className="flex max-w-sm items-center gap-3 border-[0.9px] border-ink bg-surface px-3 py-2">
+      {!error && <ProgressArc />}
+      <span className={`text-control ${error ? "text-danger" : "text-ink"}`}>{text}</span>
+      {onCancel && (
+        <button type="button" onClick={onCancel} className="ml-1 text-control font-medium text-pin underline underline-offset-2 hover:text-pin-hover">
+          Cancel
+        </button>
+      )}
+      {onRetry && (
+        <button type="button" onClick={onRetry} className="ml-1 shrink-0 text-control font-medium text-pin underline underline-offset-2 hover:text-pin-hover">
+          Try again
+        </button>
+      )}
+    </div>
+  );
+}
+
+function StageMarker({ state }: { state: StageState }) {
+  if (state === "active") return <ProgressArc />;
+  return <span className={`size-3 shrink-0 border border-ink ${state === "done" ? "bg-ink" : "bg-surface"}`} aria-hidden="true" />;
+}
+
+function StageList({ state, timings }: { state: (k: StageKey) => StageState; timings: Timings }) {
+  return (
+    <ol className="flex flex-col gap-2" aria-label="Progress">
+      {STAGES.map(({ key, label }) => (
+        <li key={key} className="flex items-center gap-3 text-body">
+          <StageMarker state={state(key)} />
+          <span className={state(key) === "pending" ? "text-ink-2" : "text-ink"}>{label}</span>
+          <span className="ml-auto text-sm text-ink-2">
+            {timings[key] !== null ? `${timings[key]!.toFixed(1)} s` : state(key) === "active" ? "running" : ""}
+          </span>
+          <span className="sr-only">{state(key)}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** "Located in 4.1 s" with the stage timings on expand, once a result exists. */
+function LocatedLine({ phase, timings, hasResult }: { phase: Phase; timings: Timings; hasResult: boolean }) {
+  if (phase.kind === "locating") return <p className="text-sm text-ink-2">Locating…</p>;
+  if (phase.kind === "ready") return <p className="text-sm text-ink-2">{hasResult ? "Change the region, then locate again." : "Ready to locate."}</p>;
+  if (phase.kind === "error") return <p className="text-sm text-danger">Not located</p>;
+  if (!hasResult || timings.search === null) return null;
+  const total = (timings.search ?? 0) + (timings.compare ?? 0) + (timings.check ?? 0);
+  return (
+    <details className="text-sm text-ink-2">
+      <summary className="cursor-pointer">Located in {total.toFixed(1)} s</summary>
+      <div className="mt-2">
+        <StageList state={() => "done"} timings={timings} />
+      </div>
+    </details>
   );
 }
 
@@ -337,17 +492,11 @@ function TipContent({ children }: { children: ReactNode }) {
   );
 }
 
-function RailButton({ label, onClick, pressed, children }: { label: string; onClick: () => void; pressed?: boolean; children: ReactNode }) {
+function RailButton({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
   return (
     <Tooltip.Root>
       <Tooltip.Trigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          aria-pressed={pressed}
-          onClick={onClick}
-          className="grid size-touch place-items-center rounded-control text-ink hover:bg-paper aria-pressed:bg-ink aria-pressed:text-surface"
-        >
+        <button type="button" aria-label={label} onClick={onClick} className="grid size-touch place-items-center rounded-control text-ink hover:bg-paper">
           {children}
         </button>
       </Tooltip.Trigger>
@@ -433,16 +582,15 @@ function EmptyState({ references, onFile, error }: { references: number; onFile:
             className="sr-only"
             aria-label="Choose a photo"
             tabIndex={-1}
-            onChange={(e) => onFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => {
+              onFile(e.target.files?.[0] ?? null);
+              e.target.value = "";
+            }}
           />
-          <button
-            type="button"
-            onClick={() => input.current?.click()}
-            className="h-touch rounded-control bg-pin px-5 text-control font-medium text-surface hover:bg-pin-hover"
-          >
+          <button type="button" onClick={() => input.current?.click()} className="h-touch rounded-control bg-pin px-5 text-control font-medium text-surface hover:bg-pin-hover">
             Choose a photo
           </button>
-          <p className="text-sm text-ink-2">Or drop it here. JPEG, PNG or HEIC, taken outdoors in Linköping.</p>
+          <p className="text-sm text-ink-2">Or drop it here or on the map. JPEG, PNG or HEIC, taken outdoors in Linköping.</p>
         </div>
         {error && <p role="alert" className="text-body text-danger">{error}</p>}
       </div>
@@ -451,16 +599,10 @@ function EmptyState({ references, onFile, error }: { references: number; onFile:
         <p className="text-body text-ink">Your photo is processed in memory and not stored.</p>
         <p className="text-body text-ink">
           It works best when buildings or streets fill the frame. Otherwise, select the part of
-          the photo that shows the place.
+          the photo that shows the place before you locate it.
         </p>
       </Section>
-      <footer className="mt-auto flex items-center justify-between gap-3 px-5 py-4 text-sm text-ink-2">
-        <span className="flex items-center gap-2">
-          <svg width="28" height="6" aria-hidden="true">
-            <line x1="2" y1="3" x2="26" y2="3" stroke="var(--color-pin)" strokeOpacity="0.45" strokeWidth="2.2" strokeLinecap="round" strokeDasharray="0 7" />
-          </svg>
-          Streets with reference photos
-        </span>
+      <footer className="mt-auto flex justify-end px-5 py-4 text-sm">
         <Link href="/about">How it works</Link>
       </footer>
     </div>
@@ -470,45 +612,46 @@ function EmptyState({ references, onFile, error }: { references: number; onFile:
 function PhotoSection(props: {
   url: string | null;
   region: Region | null;
-  regionMode: boolean;
+  editing: boolean;
   noPreview: boolean;
-  onRegionMode: (on: boolean) => void;
-  onWhole: () => void;
+  hasResult: boolean;
+  locating: boolean;
   onRegion: (r: Region) => void;
+  onWhole: () => void;
+  onChangeRegion: () => void;
+  onLocate: () => void;
   onUnavailable: () => void;
 }) {
-  const { url, region, regionMode, noPreview } = props;
+  const { url, region, editing, noPreview, hasResult, locating } = props;
+  const canLocate = !locating && (!hasResult || editing);
   return (
     <section className="flex flex-col border-b border-rule">
-      <PhotoRegion
-        src={url}
-        region={region}
-        editing={regionMode}
-        onChange={props.onRegion}
-        onUnavailable={props.onUnavailable}
-      />
-      <div className="flex flex-col gap-2 px-5 py-3">
-        <div className="flex gap-2">
-          <Toggle.Root
-            pressed={regionMode}
-            onPressedChange={props.onRegionMode}
-            disabled={noPreview || !url}
-            className="h-touch rounded-control border border-rule-control px-3 text-control text-ink hover:bg-paper disabled:text-ink-2 data-[state=on]:border-ink data-[state=on]:bg-ink data-[state=on]:text-surface desk:h-auto desk:py-2"
-          >
-            Select region
-          </Toggle.Root>
-          <button
-            type="button"
-            onClick={props.onWhole}
-            disabled={!region}
-            className="h-touch rounded-control border border-rule-control px-3 text-control text-ink hover:bg-paper disabled:text-ink-2 desk:h-auto desk:py-2"
-          >
-            Use whole photo
-          </button>
-        </div>
-        {regionMode && (
-          <p className="text-sm text-ink-2">Only the highlighted region is searched. Drag its edges to change it.</p>
+      <PhotoRegion src={url} region={region} editing={editing} onChange={props.onRegion} onUnavailable={props.onUnavailable} />
+      <div className="flex flex-col gap-3 px-5 py-3">
+        {editing && !noPreview && (
+          <p className="text-sm text-ink-2">
+            {region
+              ? "Only the highlighted region is searched. Drag its edges to change it."
+              : "Drag a box around the part that shows the place, or locate the whole photo."}
+          </p>
         )}
+        <div className="flex flex-wrap gap-2">
+          {canLocate && (
+            <button type="button" onClick={props.onLocate} className="h-touch rounded-control bg-pin px-5 text-control font-medium text-surface hover:bg-pin-hover">
+              Locate
+            </button>
+          )}
+          {hasResult && !editing && !locating && (
+            <button type="button" onClick={props.onChangeRegion} disabled={noPreview} className="h-touch rounded-control border border-rule-control px-3 text-control text-ink hover:bg-paper disabled:text-ink-2">
+              Change region
+            </button>
+          )}
+          {editing && (
+            <button type="button" onClick={props.onWhole} disabled={!region} className="h-touch rounded-control border border-rule-control px-3 text-control text-ink hover:bg-paper disabled:text-ink-2">
+              Use whole photo
+            </button>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -561,7 +704,7 @@ function MobileResult({ search, onCompare }: { search: Search; onCompare: () => 
   const p = search.prediction;
   const at = { lat: p.predicted_lat, lng: p.predicted_lng };
   return (
-    <section className="flex flex-col gap-3 border-b border-rule px-5 py-4 desk:hidden">
+    <section className="flex flex-col gap-3 border-b border-rule px-5 py-4">
       <div className="flex items-start gap-3">
         <img src={search.url} alt="Your photo" className="size-touch shrink-0 object-cover" />
         <div className="min-w-0">
@@ -584,9 +727,10 @@ function MobileResult({ search, onCompare }: { search: Search; onCompare: () => 
 function Candidates({ search, selected, onSelect }: { search: Search; selected: number; onSelect: (i: number) => void }) {
   const p = search.prediction;
   const best = { lat: p.predicted_lat, lng: p.predicted_lng };
-  const rows = p.top_matches
-    .slice(1)
-    .map((m, i) => ({ index: i + 1, match: m, place: search.places[i + 1] }));
+  const rows = useMemo(
+    () => p.top_matches.slice(1).map((m, i) => ({ index: i + 1, match: m, place: search.places[i + 1] })),
+    [p, search.places],
+  );
   if (!rows.length) return null;
   return (
     <Section title="Other candidates">
@@ -602,9 +746,7 @@ function Candidates({ search, selected, onSelect }: { search: Search; selected: 
               <span className="text-sm font-semibold text-ink">{match.rank}</span>
               <span className="min-w-0">
                 <span className="block truncate text-body font-medium text-ink">{placeLabel(place)}</span>
-                <span className="block text-sm text-ink-2">
-                  {formatDistance(distanceM(best, match))} from the best match
-                </span>
+                <span className="block text-sm text-ink-2">{formatDistance(distanceM(best, match))} from the best match</span>
               </span>
               <span className="text-sm text-ink-2">{match.inliers ?? 0} details</span>
             </button>
@@ -619,13 +761,5 @@ function CompareFor({ search, selected, tall }: { search: Search; selected: numb
   const p = search.prediction;
   const match = p.top_matches[selected] ?? p.top_matches[0];
   if (!match) return null;
-  return (
-    <Compare
-      photoUrl={search.url}
-      region={search.region}
-      match={match}
-      predicted={{ lat: p.predicted_lat, lng: p.predicted_lng }}
-      tall={tall}
-    />
-  );
+  return <Compare photoUrl={search.url} region={search.region} match={match} predicted={{ lat: p.predicted_lat, lng: p.predicted_lng }} tall={tall} />;
 }
