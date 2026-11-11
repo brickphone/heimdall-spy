@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     # Automatic region search (docs/experiments/14_auto_regions.md): "whole", "masked"
     # (people masked) or "full" (masked plus automatic crops).
     variants_mode: str = "full"
+    # Gallery search (docs/experiments/15_approximate_search.md): "exact" scans every
+    # descriptor; "ivfpq" re-scores IVF-PQ candidates exactly.
+    gallery_search: str = "exact"
+    gallery_nprobe: int = 32
+    gallery_refine: int = 10
     segment_device: str = "auto"
     s2_cell_level: int = 14
     # Central Linkoping pilot, not the full city or municipal boundary.

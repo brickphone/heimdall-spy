@@ -171,3 +171,44 @@ def test_mmap_gallery_equals_in_memory_index(tmp_path: Path) -> None:
     wide = ((15.0, 58.0), (16.0, 58.0), (16.0, 59.0), (15.0, 59.0))
     assert len(loc.Gallery(manifest, wide).refs) == 40
     assert json.loads(sidecar.read_text())["key"] != key
+
+
+def test_ivfpq_search_rescoring_is_exact(tmp_path: Path, monkeypatch) -> None:
+    import hashlib
+
+    monkeypatch.setattr(loc, "IVF_NLIST", 4)
+    monkeypatch.setattr(loc, "PQ_M", 4)
+    monkeypatch.setattr(loc, "PQ_BITS", 4)
+    rng = np.random.default_rng(2)
+    folder = tmp_path / "descriptors"
+    folder.mkdir()
+    refs = []
+    for i in range(400):
+        vector = rng.normal(size=16).astype(np.float32)
+        np.save(folder / f"h{i}.npy", vector / np.linalg.norm(vector))
+        refs.append({"image_id": f"r{i}", "lat": 58.4108, "lng": 15.6214, "sha256": f"h{i}"})
+    manifest = tmp_path / "gallery-index.json"
+    manifest.write_text(json.dumps({
+        "format": "descriptor_cache_v1", "dimension": 16, "descriptor_dir": str(folder),
+        "references_in_index_order": refs, "model_identity": IDENTITY,
+        "index_sha256": hashlib.sha256("\n".join(r["sha256"] for r in refs).encode()).hexdigest(),
+    }))
+    exact = loc.Gallery(manifest)
+    # Probing every list and re-scoring every candidate must equal the exact search.
+    approx = loc.Gallery(manifest, search="ivfpq", nprobe=4, refine=100)
+    assert loc.ann_file(manifest)[0].exists()
+    queries = rng.normal(size=(3, 16)).astype(np.float32)
+    for got, want in zip(approx.search(queries, 10), exact.search(queries, 10), strict=True):
+        np.testing.assert_array_equal(got, want)
+    # A narrow search returns exact similarities for whatever it finds.
+    narrow = loc.Gallery(manifest, search="ivfpq", nprobe=1, refine=2)
+    idx, sims = narrow.search(queries[:1], 5)
+    vecs = exact.vectors[idx[0]]
+    np.testing.assert_allclose(sims[0], 1 - ((vecs - queries[0]) ** 2).sum(1) / 2, rtol=1e-5)
+    # IVF with exact scoring: probing every cluster scores every vector, as the exact search.
+    full_ivf = loc.Gallery(manifest, search="ivf", nprobe=4)
+    for got, want in zip(full_ivf.search(queries, 10), exact.search(queries, 10), strict=True):
+        np.testing.assert_array_equal(got, want)
+    assert sum(len(ids) for ids in full_ivf.lists) == 400
+    with pytest.raises(ValueError, match="memory-mapped"):
+        loc.Gallery(manifest, mmap=False, search="ivfpq")

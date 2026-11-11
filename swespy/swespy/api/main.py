@@ -77,7 +77,9 @@ def build_locator(settings: Settings) -> Any:
     from swespy.model.locator import Gallery, GeoLocator
     from swespy.model.megaloc import MegaLocEmbedder
 
-    gallery = Gallery(Path(settings.gallery_index), settings.area_polygon)
+    gallery = Gallery(Path(settings.gallery_index), settings.area_polygon,
+                      search=settings.gallery_search, nprobe=settings.gallery_nprobe,
+                      refine=settings.gallery_refine)
     embedder = MegaLocEmbedder(Path(settings.megaloc_root), settings.megaloc_device)
     segmenter = None
     if settings.variants_mode != "whole":

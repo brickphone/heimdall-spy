@@ -52,6 +52,27 @@ def build_vectors(folder: Path, refs: list[dict[str, Any]], keep: list[int], dim
     sidecar.write_text(json.dumps({"key": key, "rows": len(keep), "dimension": dim}))
 
 
+# Approximate search (experiment 15): IVF-PQ proposes candidates, which are re-scored
+# exactly from the memory-mapped vectors. Build settings live in swespy/model/ann.py;
+# nprobe/refine are the dev-chosen search settings.
+IVF_NLIST, PQ_M, PQ_BITS = 1024, 96, 8
+
+
+def ann_file(manifest_path: Path) -> tuple[Path, Path]:
+    """The approximate index of a gallery and its checksum sidecar."""
+    stem = manifest_path.with_suffix("")
+    return stem.with_name(stem.name + ".ivfpq.faiss"), stem.with_name(stem.name + ".ivfpq.json")
+
+
+def build_ann(vectors_path: Path, path: Path, sidecar: Path, key: str) -> None:
+    """Build the IVF-PQ index in a separate process, without torch loaded."""
+    import subprocess
+    import sys
+
+    subprocess.run([sys.executable, "-m", "swespy.model.ann", str(vectors_path), str(path),
+                    str(sidecar), key, str(IVF_NLIST), str(PQ_M), str(PQ_BITS)], check=True)
+
+
 class Gallery:
     """An exact (flat L2) MegaLoc reference index restricted to the project polygon.
 
@@ -65,6 +86,9 @@ class Gallery:
         manifest_path: Path,
         polygon: tuple[tuple[float, float], ...] = LINKOPING_AREA,
         mmap: bool = True,
+        search: str = "exact",
+        nprobe: int = 32,
+        refine: int = 10,
     ) -> None:
         # Match the verified benchmark's import order for the two OpenMP runtimes.
         import torch
@@ -80,7 +104,15 @@ class Gallery:
         keep = [i for i, r in enumerate(refs) if in_area(r["lng"], r["lat"], polygon)]
         if not keep:
             raise ValueError("No gallery references lie inside the project area")
+        if search not in ("exact", "ivfpq", "ivf"):
+            raise ValueError("search must be exact, ivfpq or ivf")
+        if search != "exact" and not (saved.get("format") == "descriptor_cache_v1" and mmap):
+            raise ValueError("Approximate search needs the memory-mapped descriptor gallery")
         self.index: Any = None
+        self.ann: Any = None
+        self.lists: list[np.ndarray] = []
+        self.coarse: Any = None
+        self.search_mode, self.nprobe, self.refine = search, nprobe, refine
         self.vectors: np.ndarray | None = None
         if saved.get("format") == "descriptor_cache_v1" and mmap:
             digest = hashlib.sha256("\n".join(r["sha256"] for r in refs).encode()).hexdigest()
@@ -97,6 +129,20 @@ class Gallery:
             self.vectors = np.load(path, mmap_mode="r")
             if self.vectors.shape != (len(keep), saved["dimension"]):
                 raise ValueError("Memory-mapped descriptors differ from the manifest")
+            if search in ("ivfpq", "ivf"):
+                ann, ann_sidecar = ann_file(manifest_path)
+                stale = not (ann.exists() and ann_sidecar.exists()
+                             and json.loads(ann_sidecar.read_text()).get("key") == key)
+                if stale:
+                    build_ann(path, ann, ann_sidecar, key)
+                self.ann = faiss.read_index(str(ann))
+                if search == "ivf":
+                    # The IVF-PQ index's coarse clusters, with every member scored exactly.
+                    ivf = faiss.extract_index_ivf(self.ann)
+                    lists = ivf.invlists
+                    self.lists = [faiss.rev_swig_ptr(lists.get_ids(n), lists.list_size(n)).copy()
+                                  for n in range(ivf.nlist)]
+                    self.coarse = ivf.quantizer
         elif saved.get("format") == "descriptor_cache_v1":
             self.index = faiss.IndexFlatL2(saved["dimension"])
             # Gallery v2: descriptors live once, in the hash-keyed MegaLoc cache.
@@ -136,6 +182,36 @@ class Gallery:
         self.by_image_id = {r.get("image_id"): i for i, r in enumerate(self.refs)}
         self.index_sha256: str = saved["index_sha256"]
 
+    def _search_ivf(self, vectors: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray]:
+        """Probe the ``nprobe`` nearest clusters and score all their members exactly."""
+        _, probe = self.coarse.search(vectors, self.nprobe)
+        return self._rescore(vectors, [np.concatenate([self.lists[c] for c in row if c >= 0])
+                                       for row in probe], k)
+
+    def _rescore(self, vectors: np.ndarray, candidates: list[np.ndarray], k: int
+                 ) -> tuple[np.ndarray, np.ndarray]:
+        """Exact distances for each query's candidate rows; the best ``k`` per query."""
+        import faiss
+
+        indices = np.full((len(vectors), k), -1, dtype=np.int64)
+        distances = np.full((len(vectors), k), np.inf, dtype=np.float32)
+        for row, cand in enumerate(candidates):
+            cand = np.sort(cand[cand >= 0])  # Sorted rows read the mapped file in order.
+            if not len(cand):
+                continue
+            d, i = faiss.knn(vectors[row:row + 1], np.ascontiguousarray(self.vectors[cand]),
+                             min(k, len(cand)))
+            indices[row, : i.shape[1]] = cand[i[0]]
+            distances[row, : d.shape[1]] = d[0]
+        return indices, 1 - distances / 2
+
+    def _search_ann(self, vectors: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray]:
+        """IVF-PQ candidates, re-scored exactly: returned similarities are exact."""
+
+        self.ann.nprobe = self.nprobe
+        _, proposed = self.ann.search(vectors, min(self.refine * k, len(self.refs)))
+        return self._rescore(vectors, list(proposed), k)
+
     def reference(self, image_id: str) -> dict[str, Any] | None:
         i = self.by_image_id.get(image_id)
         return None if i is None else self.refs[i]
@@ -155,6 +231,10 @@ class Gallery:
         faiss.omp_set_num_threads(1)
         vectors = np.ascontiguousarray(np.atleast_2d(vectors), dtype=np.float32)
         k = min(depth, len(self.refs))
+        if self.search_mode == "ivf":
+            return self._search_ivf(vectors, k)
+        if self.ann is not None:
+            return self._search_ann(vectors, k)
         if self.vectors is not None:
             # Same exact squared-L2 search as IndexFlatL2, over the mapped matrix (no copy).
             distances, indices = faiss.knn(vectors, self.vectors, k)
@@ -202,7 +282,10 @@ class GeoLocator:
                         "references": len(self.gallery.refs),
                         "index_sha256": self.gallery.index_sha256[:16],
                         "created_at": self.gallery.created_at,
-                        "sealed_guard": self.gallery.sealed_guard},
+                        "sealed_guard": self.gallery.sealed_guard,
+                        "search": getattr(self.gallery, "search_mode", "exact"),
+                        **({"nprobe": self.gallery.nprobe, "refine": self.gallery.refine}
+                           if getattr(self.gallery, "search_mode", "exact") != "exact" else {})},
             "retrieval_depth": self.depth,
             "rerank": {"enabled": self.verifier is not None},
             "variants": {"mode": self.variants_mode if self.segmenter else "whole",
