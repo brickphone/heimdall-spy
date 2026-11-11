@@ -111,10 +111,13 @@ def test_locator_reranks_with_geometric_verification(tmp_path: Path) -> None:
     from PIL import Image
 
     class FakeVerifier:
-        def verify(self, image, references):
+        def verify_iter(self, image, references):
             # Only the second-ranked reference ("centre") shows the same scene.
-            return [{"inliers": 120 if "h0" in str(path) or key == "h0" else 0, "matches": 150}
-                    for key, path in references]
+            for key, path in references:
+                yield {"inliers": 120 if "h0" in str(path) or key == "h0" else 0, "matches": 150}
+
+        def verify(self, image, references):
+            return list(self.verify_iter(image, references))
 
     manifest = gallery_files(tmp_path)
     saved = json.loads(manifest.read_text())

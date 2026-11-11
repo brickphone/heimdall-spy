@@ -46,6 +46,18 @@ class DummyLocator:
             ],
         }
 
+    def locate_events(self, contents: bytes, region: dict[str, float] | None = None,
+                      cancelled: Any = lambda: False) -> Any:
+        """The same event sequence as GeoLocator.locate_events, with fixed values."""
+        yield {"type": "stage", "stage": "retrieval"}
+        yield {"type": "candidates", "items": [
+            {"id": n, "lat": 58.41 + n * 1e-4, "lng": 15.62, "similarity": 0.9 - n * 0.01}
+            for n in range(50)]}
+        yield {"type": "stage", "stage": "verification", "count": 5}
+        for n in range(5):
+            yield {"type": "verified", "id": n, "inliers": 40 - n, "score": 0.9}
+        yield {"type": "_result", "result": self.locate_bytes(contents, region)}
+
 
 def build_locator(settings: Settings) -> Any:
     """Load MegaLoc and the polygon-restricted gallery: the one inference path."""

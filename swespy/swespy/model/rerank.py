@@ -125,13 +125,14 @@ class GeometricVerifier:
             return {"matches": n, "inliers": 0}
         return {"matches": n, "inliers": int(mask.sum()) if mask is not None else 0}
 
-    def verify(self, query_image: Any, references: list[tuple[str, Any]]) -> list[dict[str, Any]]:
-        """Inliers for each (cache key, PIL image or path) reference, plus timings."""
+    def verify_iter(self, query_image: Any, references: list[tuple[str, Any]]) -> Any:
+        """Yield inliers for each (cache key, PIL image or path) reference, in order.
+
+        The query's features are extracted once, so results equal ``verify``'s.
+        """
         from PIL import Image
 
-        started = time.perf_counter()
         q = self.features(query_image)
-        results = []
         for key, ref in references:
             if isinstance(ref, str | Path):
                 cached = self.cache_dir and (self.cache_dir / f"{key}.pt").exists()
@@ -142,7 +143,12 @@ class GeometricVerifier:
                         feats = self.features(im.copy(), key)
             else:
                 feats = self.features(ref, key)
-            results.append(self.inliers(q, feats))
+            yield self.inliers(q, feats)
+
+    def verify(self, query_image: Any, references: list[tuple[str, Any]]) -> list[dict[str, Any]]:
+        """Inliers for each (cache key, PIL image or path) reference, plus timings."""
+        started = time.perf_counter()
+        results = list(self.verify_iter(query_image, references))
         if results:
             results[0]["seconds_total"] = time.perf_counter() - started
         return results

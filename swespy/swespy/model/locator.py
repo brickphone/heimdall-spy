@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -106,6 +107,10 @@ class Gallery:
         return indices, 1 - distances / 2
 
 
+class Cancelled(Exception):
+    """The caller cancelled a locating run (e.g. the client disconnected)."""
+
+
 class GeoLocator:
     """Rank gallery references for a query and report the top candidates."""
 
@@ -173,25 +178,75 @@ class GeoLocator:
         """Locate an uploaded image held only in memory (re-ranked if a verifier is set).
 
         ``region`` (normalised x, y, width, height) restricts both stages to that part.
+        Runs the same steps as ``locate_events``, so /predict and /predict/stream agree.
         """
+        result: dict[str, Any] = {}
+        for event in self.locate_events(contents, region):
+            if event["type"] == "_result":
+                result = event["result"]
+        return result
+
+    def locate_events(self, contents: bytes, region: dict[str, float] | None = None,
+                      cancelled: Callable[[], bool] = lambda: False) -> Iterator[dict[str, Any]]:
+        """The locating pipeline as progress events (see POST /predict/stream).
+
+        Yields, in order: stage "retrieval"; "candidates" (the retrieval depth, locations
+        and similarity only; ``id`` is the retrieval rank, 0-based); stage "verification";
+        one "verified" event per re-ranked candidate as it completes; and finally an
+        internal "_result" event carrying exactly what ``locate_bytes`` returns.
+        ``cancelled`` is checked between steps; when it returns True, ``Cancelled`` is
+        raised and no further work is done.
+        """
+        from swespy.model import rerank as rr
         from swespy.model.imageio import crop_region, decode_upload
 
+        def check() -> None:
+            if cancelled():
+                raise Cancelled
+
+        yield {"type": "stage", "stage": "retrieval"}
         # One decode for both stages: upright RGB pixels only, no EXIF/GPS metadata.
         image = crop_region(decode_upload(contents), region)
+        check()
         result = self.locate_vector(self.embedder.embed_image(image))
+        refs = self.gallery.refs
+        yield {"type": "candidates", "items": [
+            {"id": n, "lat": refs[i]["lat"], "lng": refs[i]["lng"], "similarity": s}
+            for n, (i, s) in enumerate(zip(result["ranked_indices"],
+                                           result["ranked_similarities"], strict=True))]}
+        check()
         if self.verifier is None:
-            return result
-        return self.rerank_result(result, image)
+            yield {"type": "_result", "result": result}
+            return
+        k = self.rerank_k
+        order, sims = result["ranked_indices"][:k], result["ranked_similarities"][:k]
+        yield {"type": "stage", "stage": "verification", "count": len(order)}
+        checks = []
+        for n, (c, s) in enumerate(zip(self.verifier.verify_iter(
+                image, [(refs[i]["sha256"], self.gallery.root / refs[i]["path"]) for i in order]),
+                sims, strict=True)):
+            checks.append(c)
+            score = rr.combined_scores([s], [c["inliers"]], self.weight)[0]
+            yield {"type": "verified", "id": n, "inliers": c["inliers"], "score": score}
+            check()
+        yield {"type": "_result", "result": self.finalize_result(result, checks)}
 
     def rerank_result(self, result: dict[str, Any], image: Any) -> dict[str, Any]:
         """Geometric verification of the top ``depth`` candidates, then shared finalize."""
+        refs = self.gallery.refs
+        order = result["ranked_indices"][: self.rerank_k]
+        checks = self.verifier.verify(
+            image, [(refs[i]["sha256"], self.gallery.root / refs[i]["path"]) for i in order])
+        return self.finalize_result(result, checks)
+
+    def finalize_result(self, result: dict[str, Any], checks: list[dict[str, Any]]
+                        ) -> dict[str, Any]:
+        """Re-ranked result from the verification of the first ``rerank_k`` candidates."""
         from swespy.model import rerank as rr
 
         refs = self.gallery.refs
         k = self.rerank_k
         order, sims = result["ranked_indices"][:k], result["ranked_similarities"][:k]
-        checks = self.verifier.verify(
-            image, [(refs[i]["sha256"], self.gallery.root / refs[i]["path"]) for i in order])
         candidates = [{"index": i, "similarity": s, "inliers": c["inliers"],
                        **{k: refs[i].get(k) for k in REFERENCE_FIELDS}}
                       for i, s, c in zip(order, sims, checks, strict=True)]
