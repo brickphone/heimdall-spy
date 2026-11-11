@@ -13,6 +13,8 @@ interface Props {
   src: string | null;
   region: Region | null;
   editing: boolean;
+  /** After a result: the part of the photo whose match won, outlined as "Searched area". */
+  searched?: Region | null;
   onChange: (region: Region) => void; // Called when a drag or key press finishes.
   onUnavailable: () => void;
 }
@@ -49,7 +51,7 @@ function fit(r: Region, v: Region): Region {
   };
 }
 
-export default function PhotoRegion({ src, region, editing, onChange, onUnavailable }: Props) {
+export default function PhotoRegion({ src, region, editing, searched, onChange, onUnavailable }: Props) {
   const frame = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState<Box | null>(null);
   // While dragging, the region being drawn; otherwise the parent's region is shown.
@@ -139,12 +141,21 @@ export default function PhotoRegion({ src, region, editing, onChange, onUnavaila
     onChange(fit(r, visible(box)));
   }
 
-  const shown = draft && box && {
-    left: draft.x * box.natW * box.scale + box.offX,
-    top: draft.y * box.natH * box.scale + box.offY,
-    width: draft.width * box.natW * box.scale,
-    height: draft.height * box.natH * box.scale,
-  };
+  const place = (r: Region, b: Box) => ({
+    left: r.x * b.natW * b.scale + b.offX,
+    top: r.y * b.natH * b.scale + b.offY,
+    width: r.width * b.natW * b.scale,
+    height: r.height * b.natH * b.scale,
+  });
+  const outline = !editing && searched ? searched : null;
+  const shown = !outline && draft && box && place(draft, box);
+  // The searched area, clipped to the visible part of the cover-fitted photo.
+  const area = outline && box && (() => {
+    const r = place(outline, box);
+    const left = Math.max(0, r.left);
+    const top = Math.max(0, r.top);
+    return { left, top, width: Math.min(box.boxW, r.left + r.width) - left, height: Math.min(box.boxH, r.top + r.height) - top };
+  })();
 
   return (
     <div
@@ -208,6 +219,11 @@ export default function PhotoRegion({ src, region, editing, onChange, onUnavaila
                 }
               />
             ))}
+        </div>
+      )}
+      {area && (
+        <div className="pointer-events-none absolute border border-pin" style={area} data-testid="searched-area">
+          <span className="absolute left-0 top-0 bg-pin px-2 py-0.5 text-xs text-surface">Searched area</span>
         </div>
       )}
     </div>

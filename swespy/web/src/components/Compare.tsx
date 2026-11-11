@@ -71,7 +71,7 @@ export default function Compare({ photoUrl, region, match, predicted, tall }: Pr
     <figure className="flex flex-col gap-3">
       <div
         ref={frame}
-        className={`relative w-full overflow-hidden bg-rule-list touch-none ${tall ? "h-full min-h-photo" : "aspect-[4/3]"}`}
+        className={`relative w-full overflow-hidden bg-rule-list touch-none ${tall ? "h-full min-h-photo" : "h-compare"}`}
         onPointerDown={(e: PointerEvent) => {
           dragging.current = true;
           (e.target as HTMLElement).setPointerCapture(e.pointerId);

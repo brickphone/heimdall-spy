@@ -7,7 +7,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type Reac
 import { IconMinus, IconPlus } from "@/components/Icons";
 import { type LatLng, circle, formatCoords, metresPerPixel } from "@/lib/geo";
 import { mapStyle, token } from "@/lib/mapStyle";
-import { ringRadiiPx } from "@/lib/rings";
+import { lowRadiiPx, ringRadiiPx } from "@/lib/rings";
 import type { CandidatePoint } from "@/lib/stream";
 
 export interface MapItem {
@@ -46,6 +46,8 @@ const SEARCH_PITCH = 35;
 const RESULT_PITCH = 45;
 const RESULT_BEARING = -18;
 const RESULT_ZOOM = 16;
+// Low confidence: an overview of all candidates, flat and below the 3D-building zoom (15).
+const LOW_MAX_ZOOM = 14.5;
 const DIM_MS = 400;
 const CALLOUT_ROOM_PX = 260;
 const DIMMED_LABELS = ["district-names", "water-names", "street-names"];
@@ -92,6 +94,7 @@ const LocatingMap = forwardRef<LocatingMapHandle, Props>(function LocatingMap(pr
     dots: [] as { p: CandidatePoint; o: number }[],
     top: [] as CandidatePoint[],
     items: [] as MapItem[],
+    low: false,
     markers: [] as Marker[],
     callout: null as Marker | null,
     saved: null as null | { center: [number, number]; zoom: number; pitch: number; bearing: number },
@@ -165,6 +168,7 @@ const LocatingMap = forwardRef<LocatingMapHandle, Props>(function LocatingMap(pr
   }
 
   function clearSequence() {
+    element.current?.removeAttribute("data-result");
     st.current.cancels.forEach((c) => c());
     st.current.cancels = [];
     stopRotation();
@@ -200,8 +204,10 @@ const LocatingMap = forwardRef<LocatingMapHandle, Props>(function LocatingMap(pr
     el.className = "map-callout-marker";
     el.setAttribute("aria-hidden", "true");
     el.innerHTML = '<span class="map-callout-leader"></span><span class="map-callout"><span class="map-callout-name"></span><span class="map-callout-coords"></span></span>';
-    (el.querySelector(".map-callout-name") as HTMLElement).textContent = item.label;
-    (el.querySelector(".map-callout-coords") as HTMLElement).textContent = formatCoords(item.at);
+    // Low confidence: the prediction is labelled as a guess, with its place below.
+    const guess = st.current.low && item.index === 0;
+    (el.querySelector(".map-callout-name") as HTMLElement).textContent = guess ? "Best guess" : item.label;
+    (el.querySelector(".map-callout-coords") as HTMLElement).textContent = guess ? item.label : formatCoords(item.at);
     const mk = new ml.Marker({ element: el, anchor: "bottom-left" }).setLngLat([item.at.lng, item.at.lat]).addTo(m);
     const place = () => {
       const x = m.project([item.at.lng, item.at.lat]).x;
@@ -310,12 +316,17 @@ const LocatingMap = forwardRef<LocatingMapHandle, Props>(function LocatingMap(pr
       drawDots();
       st.current.items = items;
       const best = items[0];
-      // Candidates keep their final dashed rings; the prediction's rings draw in.
+      const low = state !== "ok";
+      st.current.low = low;
+      // Candidates keep their final dashed rings; the prediction's rings draw in. When
+      // confidence is low, the prediction is drawn like a candidate: wide and dashed.
       st.current.rings = [
         ...items.slice(1).map((it) => ({
-          at: it.at, kind: "candidate" as const, radii: ringRadiiPx(it.inliers, "candidate"), progress: [1, 1, 1],
+          at: it.at, kind: "candidate" as const, radii: low ? lowRadiiPx(it.inliers) : ringRadiiPx(it.inliers, "candidate"), progress: [1, 1, 1],
         })),
-        { at: best.at, kind: "prediction" as const, radii: ringRadiiPx(best.inliers, "prediction", state), progress: [0, 0, 0] },
+        low
+          ? { at: best.at, kind: "candidate" as const, radii: lowRadiiPx(best.inliers), progress: [0, 0, 0] }
+          : { at: best.at, kind: "prediction" as const, radii: ringRadiiPx(best.inliers, "prediction", state), progress: [0, 0, 0] },
       ];
       drawRings();
       st.current.markers.forEach((mk) => mk.remove());
@@ -325,8 +336,8 @@ const LocatingMap = forwardRef<LocatingMapHandle, Props>(function LocatingMap(pr
         el.dataset.index = String(item.index);
         el.addEventListener("click", () => select.current(item.index));
         if (item.index === 0) {
-          el.className = "map-pin";
-          el.setAttribute("aria-label", `Best match: ${item.label}`);
+          el.className = low ? "map-pin unsure" : "map-pin";
+          el.setAttribute("aria-label", low ? `Best guess: ${item.label}` : `Best match: ${item.label}`);
         } else {
           el.className = "map-square";
           el.textContent = String(item.rank);
@@ -336,6 +347,8 @@ const LocatingMap = forwardRef<LocatingMapHandle, Props>(function LocatingMap(pr
       });
       markSelected(0);
       const drawIn = () => {
+        // The settled camera, for the end-to-end checks (scripts/e2e-regions.mjs).
+        element.current?.setAttribute("data-result", `${low ? "low" : "confident"} pitch=${Math.round(m.getPitch())} zoom=${m.getZoom().toFixed(1)}`);
         const pred = st.current.rings[st.current.rings.length - 1];
         // Inner to outer, 300 ms each, staggered by 120 ms.
         st.current.cancels.push(
@@ -346,7 +359,17 @@ const LocatingMap = forwardRef<LocatingMapHandle, Props>(function LocatingMap(pr
         );
         showCallout(best);
       };
-      const target = { center: [best.at.lng, best.at.lat] as [number, number], zoom: RESULT_ZOOM, pitch: RESULT_PITCH, bearing: RESULT_BEARING };
+      let target: { center: [number, number]; zoom: number; pitch: number; bearing: number } = {
+        center: [best.at.lng, best.at.lat], zoom: RESULT_ZOOM, pitch: RESULT_PITCH, bearing: RESULT_BEARING,
+      };
+      if (low) {
+        // No close-up and no 3D: fit all candidates, flat and north-up.
+        const b = new ml.LngLatBounds();
+        items.forEach((it) => b.extend([it.at.lng, it.at.lat]));
+        const cam = m.cameraForBounds(b, { padding: compact ? 60 : 120, maxZoom: LOW_MAX_ZOOM });
+        const c = cam?.center ? ml.LngLat.convert(cam.center) : null;
+        target = { center: c ? [c.lng, c.lat] : target.center, zoom: cam?.zoom ?? LOW_MAX_ZOOM, pitch: 0, bearing: 0 };
+      }
       if (reducedMotion()) {
         m.jumpTo(target);
         drawIn();
@@ -378,7 +401,7 @@ const LocatingMap = forwardRef<LocatingMapHandle, Props>(function LocatingMap(pr
       if (!m || !item) return;
       markSelected(index);
       showCallout(item);
-      const target = { center: [item.at.lng, item.at.lat] as [number, number], pitch: RESULT_PITCH };
+      const target = { center: [item.at.lng, item.at.lat] as [number, number], pitch: st.current.low ? 0 : RESULT_PITCH };
       if (reducedMotion()) m.jumpTo(target);
       else m.flyTo({ ...target, duration: 800, easing: easeInOut });
     },
@@ -387,6 +410,7 @@ const LocatingMap = forwardRef<LocatingMapHandle, Props>(function LocatingMap(pr
       clearSequence();
       setDim(false);
       st.current.items = [];
+      st.current.low = false;
       const m = map.current;
       if (m) m.jumpTo({ pitch: 0, bearing: 0 });
       frameArea();
@@ -537,6 +561,7 @@ const LocatingMap = forwardRef<LocatingMapHandle, Props>(function LocatingMap(pr
           background: var(--color-pin); box-shadow: 0 0 0 var(--pin-halo) var(--color-surface);
           border: 0; padding: 0; cursor: pointer;
         }
+        .map-pin.unsure { background: var(--color-unsure); }
         .map-pin[aria-pressed="true"] { outline: var(--border) solid var(--color-ink); outline-offset: var(--pin-halo); }
         .map-square {
           width: var(--square-size); height: var(--square-size); border-radius: var(--radius-square);

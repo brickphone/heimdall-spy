@@ -122,7 +122,7 @@ async function captureStream(page) {
   const sawSearching = labels.some((l) => l.join(" ").includes("Searching Linköping"));
   const sawComparing = labels.some((l) => l.join(" ").includes("Comparing the 5 closest matches"));
   check("status label shows the stages from the stream", sawSearching && sawComparing, JSON.stringify(labels.map((l) => l.join(" ").replace(/\s+/g, " ").slice(0, 40))));
-  const located = await page.locator("summary", { hasText: "Located in" }).innerText();
+  const located = await page.getByText(/^Located in /).first().innerText();
   check("result header shows 'Located in … s'", /^Located in \d+\.\d s$/.test(located), located);
 
   // API-equals for 3 dev photos (UI = stream result = eval).

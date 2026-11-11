@@ -14,6 +14,7 @@ export interface Match {
   capture_year: number | null;
   inliers: number | null;
   score: number | null;
+  variant?: string | null;
 }
 
 export interface Region {
@@ -31,7 +32,18 @@ export interface Prediction {
   top_matches: Match[];
   processing_time_ms: number;
   region: Region | null;
+  /** Automatic region search: the part of the photo whose match won. */
+  searched_variant: string;
+  searched_region: Region | null;
+  person_share: number | null;
+  alternative_region: Region | null;
   versions: Record<string, unknown>;
+}
+
+export interface Analysis {
+  person_share: number | null;
+  suggested_region: Region | null;
+  suggest: boolean; // People cover more than 30% of the photo.
 }
 
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // Same limit as the API and its proxy.
@@ -101,6 +113,18 @@ export async function predict(file: File, region: Region | null): Promise<Predic
   }
   if (!response.ok) throw await explain(response);
   return (await response.json()) as Prediction;
+}
+
+/** People share and a suggested region, before searching (no retrieval). Never throws. */
+export async function analyze(file: File, signal: AbortSignal): Promise<Analysis | null> {
+  const body = new FormData();
+  body.append("file", withMimeType(file));
+  try {
+    const response = await fetch(`${API}/analyze`, { method: "POST", body, signal });
+    return response.ok ? ((await response.json()) as Analysis) : null;
+  } catch {
+    return null; // The suggestion is optional; locating still works without it.
+  }
 }
 
 export function referenceImageUrl(imageId: string): string {

@@ -11,7 +11,7 @@ import Compare from "@/components/Compare";
 import { IconBack, IconClose, IconHelp, IconNew, IconRecent, LogoMark } from "@/components/Icons";
 import LocatingMap, { type LocatingMapHandle, type MapItem } from "@/components/LocatingMap";
 import PhotoRegion from "@/components/PhotoRegion";
-import { type Prediction, type Region, UserFacingError, checkFile } from "@/lib/api";
+import { type Prediction, type Region, UserFacingError, analyze, checkFile } from "@/lib/api";
 import { distanceM, formatCoords, formatDistance, plainCoords } from "@/lib/geo";
 import { type Place, loadPlaces, lookup, placeLabel } from "@/lib/places";
 import { reasonText } from "@/lib/reason";
@@ -54,6 +54,16 @@ const STAGES: { key: StageKey; label: string }[] = [
 const HOLD = { begin: 900, candidates: 1000, verification: 1200, verified: 180 } as const;
 const HOLD_REDUCED = { begin: 250, candidates: 250, verification: 250, verified: 60 } as const;
 
+// Notes under the photo when Heimdall pre-draws a region.
+const NOTES = {
+  person: "Most of this photo is a person. The highlighted area shows the place.",
+  alternative: "Another part of the photo is highlighted. Adjust it or use the whole photo, then locate again.",
+} as const;
+type Note = keyof typeof NOTES;
+
+/** True when the result came from part of the photo rather than all of it. */
+const usedRegion = (p: Prediction) => p.searched_variant === "manual" || p.searched_variant.startsWith("crop:");
+
 const reducedMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -70,8 +80,11 @@ export default function Workspace({ references, area }: { references: number; ar
   const [compareOpen, setCompareOpen] = useState(false);
   const [timings, setTimings] = useState<Timings>({ search: null, compare: null, check: null });
   const [emptyError, setEmptyError] = useState<string | null>(null);
+  const [note, setNote] = useState<Note | null>(null);
   const mapRef = useRef<LocatingMapHandle>(null);
+  const photoRef = useRef<HTMLDivElement>(null);
   const abort = useRef<AbortController | null>(null);
+  const analyzing = useRef<AbortController | null>(null);
   const runId = useRef(0);
 
   useEffect(() => {
@@ -93,10 +106,44 @@ export default function Workspace({ references, area }: { references: number; ar
     setFile(f);
     setUrl(URL.createObjectURL(f));
     setRegion(null);
+    setNote(null);
     setEditing(true);
     setNoPreview(false);
     setResult(null);
     setPhase({ kind: "ready" });
+    suggest(f);
+  }
+
+  /** Ask the API whether people dominate the photo; if so, pre-draw the place. */
+  function suggest(f: File) {
+    analyzing.current?.abort();
+    const controller = new AbortController();
+    analyzing.current = controller;
+    void analyze(f, controller.signal).then((a) => {
+      if (controller.signal.aborted || !a?.suggest || !a.suggested_region) return;
+      const suggested = a.suggested_region;
+      // Never replace a region the user has drawn in the meantime.
+      setRegion((current) => {
+        if (current) return current;
+        setNote("person");
+        return suggested;
+      });
+    });
+  }
+
+  function stopAnalyze() {
+    analyzing.current?.abort();
+    analyzing.current = null;
+  }
+
+  /** Low confidence: open region selection with the best automatic alternative drawn. */
+  function tryDifferentRegion() {
+    if (!result) return;
+    stopAnalyze();
+    setRegion(result.prediction.alternative_region);
+    setNote(result.prediction.alternative_region ? "alternative" : null);
+    setEditing(true);
+    photoRef.current?.scrollIntoView({ block: "nearest", behavior: reducedMotion() ? "auto" : "smooth" });
   }
 
   function stopRun() {
@@ -107,6 +154,8 @@ export default function Workspace({ references, area }: { references: number; ar
 
   function reset() {
     stopRun();
+    stopAnalyze();
+    setNote(null);
     mapRef.current?.reset();
     setFile(null);
     setUrl(null);
@@ -134,6 +183,8 @@ export default function Workspace({ references, area }: { references: number; ar
   async function locate() {
     if (!file || !url) return;
     stopRun();
+    stopAnalyze();
+    setNote(null);
     const id = runId.current;
     const controller = new AbortController();
     abort.current = controller;
@@ -232,6 +283,8 @@ export default function Workspace({ references, area }: { references: number; ar
 
   function restore(s: Search) {
     stopRun();
+    stopAnalyze();
+    setNote(null);
     setFile(s.file);
     setUrl(s.url);
     setRegion(s.region);
@@ -263,22 +316,30 @@ export default function Workspace({ references, area }: { references: number; ar
   };
 
   const photo = file && (
-    <PhotoSection
-      url={url}
-      region={region}
-      editing={editing && !locating}
-      noPreview={noPreview}
-      hasResult={Boolean(result)}
-      locating={locating}
-      onRegion={setRegion}
-      onWhole={() => setRegion(null)}
-      onChangeRegion={() => setEditing(true)}
-      onLocate={() => void locate()}
-      onUnavailable={() => {
-        setNoPreview(true);
-        setEditing(false);
-      }}
-    />
+    <div ref={photoRef}>
+      <PhotoSection
+        url={url}
+        region={region}
+        searched={result && !locating ? result.prediction.searched_region : null}
+        note={note && editing && !locating ? NOTES[note] : null}
+        editing={editing && !locating}
+        noPreview={noPreview}
+        hasResult={Boolean(result)}
+        locating={locating}
+        onRegion={setRegion}
+        onWhole={() => {
+          stopAnalyze();
+          setRegion(null);
+          setNote(null);
+        }}
+        onChangeRegion={() => setEditing(true)}
+        onLocate={() => void locate()}
+        onUnavailable={() => {
+          setNoPreview(true);
+          setEditing(false);
+        }}
+      />
+    </div>
   );
 
   // The stage list is shown while locating (and after an error); with a result it
@@ -292,16 +353,19 @@ export default function Workspace({ references, area }: { references: number; ar
   const results = result && (
     <div className={`desk:contents ${locating ? "pointer-events-none opacity-40" : ""}`} inert={locating}>
       <div className="hidden desk:contents">
-        <ResultSection search={result} />
-        <Candidates search={result} selected={selected} onSelect={selectCandidate} />
+        <ResultSection search={result} onTryRegion={tryDifferentRegion} />
         <Section title="Your region and the match">
           <CompareFor search={result} selected={selected} />
         </Section>
-      </div>
-      <div className="desk:hidden">
-        <MobileResult search={result} onCompare={() => setCompareOpen(true)} />
         <Candidates search={result} selected={selected} onSelect={selectCandidate} />
       </div>
+      <div className="desk:hidden">
+        <MobileResult search={result} onCompare={() => setCompareOpen(true)} onTryRegion={tryDifferentRegion} />
+        <Candidates search={result} selected={selected} onSelect={selectCandidate} />
+      </div>
+      <Section title="Stage timings">
+        <StageList state={() => "done"} timings={result.timings} />
+      </Section>
     </div>
   );
 
@@ -465,21 +529,14 @@ function StageList({ state, timings }: { state: (k: StageKey) => StageState; tim
   );
 }
 
-/** "Located in 4.1 s" with the stage timings on expand, once a result exists. */
+/** "Located in 4.1 s" once a result exists; the stage timings close the inspector. */
 function LocatedLine({ phase, timings, hasResult }: { phase: Phase; timings: Timings; hasResult: boolean }) {
   if (phase.kind === "locating") return <p className="text-sm text-ink-2">Locating…</p>;
   if (phase.kind === "ready") return <p className="text-sm text-ink-2">{hasResult ? "Change the region, then locate again." : "Ready to locate."}</p>;
   if (phase.kind === "error") return <p className="text-sm text-danger">Not located</p>;
   if (!hasResult || timings.search === null) return null;
   const total = (timings.search ?? 0) + (timings.compare ?? 0) + (timings.check ?? 0);
-  return (
-    <details className="text-sm text-ink-2">
-      <summary className="cursor-pointer">Located in {total.toFixed(1)} s</summary>
-      <div className="mt-2">
-        <StageList state={() => "done"} timings={timings} />
-      </div>
-    </details>
-  );
+  return <p className="text-sm text-ink-2">Located in {total.toFixed(1)} s</p>;
 }
 
 function TipContent({ children }: { children: ReactNode }) {
@@ -612,6 +669,8 @@ function EmptyState({ references, onFile, error }: { references: number; onFile:
 function PhotoSection(props: {
   url: string | null;
   region: Region | null;
+  searched: Region | null;
+  note: string | null;
   editing: boolean;
   noPreview: boolean;
   hasResult: boolean;
@@ -626,8 +685,9 @@ function PhotoSection(props: {
   const canLocate = !locating && (!hasResult || editing);
   return (
     <section className="flex flex-col border-b border-rule">
-      <PhotoRegion src={url} region={region} editing={editing} onChange={props.onRegion} onUnavailable={props.onUnavailable} />
+      <PhotoRegion src={url} region={region} editing={editing} searched={props.searched} onChange={props.onRegion} onUnavailable={props.onUnavailable} />
       <div className="flex flex-col gap-3 px-5 py-3">
+        {props.note && !noPreview && <p className="text-body text-ink">{props.note}</p>}
         {editing && !noPreview && (
           <p className="text-sm text-ink-2">
             {region
@@ -684,9 +744,22 @@ function CopyButton({ text, tall }: { text: string; tall?: boolean }) {
   );
 }
 
-function ResultSection({ search }: { search: Search }) {
+function TryRegionButton({ onClick, tall }: { onClick: () => void; tall?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`h-touch rounded-control border border-rule-control px-3 text-control text-ink hover:bg-paper ${tall ? "flex-1" : "self-start"}`}
+    >
+      Try a different region
+    </button>
+  );
+}
+
+function ResultSection({ search, onTryRegion }: { search: Search; onTryRegion: () => void }) {
   const p = search.prediction;
   const at = { lat: p.predicted_lat, lng: p.predicted_lng };
+  const low = p.confidence_state !== "ok";
   return (
     <Section>
       <StateLine state={p.confidence_state} />
@@ -695,12 +768,13 @@ function ResultSection({ search }: { search: Search }) {
         {formatCoords(at)}
         <CopyButton text={plainCoords(at)} />
       </p>
-      <p className="text-body text-ink">{reasonText(p, Boolean(search.region))}</p>
+      <p className="text-body text-ink">{reasonText(p, usedRegion(p))}</p>
+      {low && <TryRegionButton onClick={onTryRegion} />}
     </Section>
   );
 }
 
-function MobileResult({ search, onCompare }: { search: Search; onCompare: () => void }) {
+function MobileResult({ search, onCompare, onTryRegion }: { search: Search; onCompare: () => void; onTryRegion: () => void }) {
   const p = search.prediction;
   const at = { lat: p.predicted_lat, lng: p.predicted_lng };
   return (
@@ -713,13 +787,14 @@ function MobileResult({ search, onCompare }: { search: Search; onCompare: () => 
           <p className="text-sm text-ink-2">{formatCoords(at)}</p>
         </div>
       </div>
-      <p className="text-body text-ink">{reasonText(p, Boolean(search.region))}</p>
+      <p className="text-body text-ink">{reasonText(p, usedRegion(p))}</p>
       <div className="flex gap-2">
         <button type="button" onClick={onCompare} className="h-touch flex-[2] rounded-control bg-pin text-control font-medium text-surface hover:bg-pin-hover">
           Compare with match
         </button>
         <CopyButton text={plainCoords(at)} tall />
       </div>
+      {p.confidence_state !== "ok" && <TryRegionButton onClick={onTryRegion} />}
     </section>
   );
 }
@@ -761,5 +836,6 @@ function CompareFor({ search, selected, tall }: { search: Search; selected: numb
   const p = search.prediction;
   const match = p.top_matches[selected] ?? p.top_matches[0];
   if (!match) return null;
-  return <Compare photoUrl={search.url} region={search.region} match={match} predicted={{ lat: p.predicted_lat, lng: p.predicted_lng }} tall={tall} />;
+  // "Your region" is the part of the photo whose match won (manual, crop or whole).
+  return <Compare photoUrl={search.url} region={p.searched_region ?? search.region} match={match} predicted={{ lat: p.predicted_lat, lng: p.predicted_lng }} tall={tall} />;
 }

@@ -35,3 +35,13 @@ export function ringRadiiPx(
   const base = kind === "prediction" ? PREDICTION_BASE_PX : CANDIDATE_BASE_PX;
   return base.map((r) => r * spread * extra);
 }
+
+/**
+ * Low-confidence result: no ring is drawn tighter than a candidate's. Every location,
+ * the best guess included, gets candidate-style dashed rings spread a further 1.25x.
+ */
+export const LOW_SPREAD = 1.25;
+
+export function lowRadiiPx(inliers: number | null): number[] {
+  return ringRadiiPx(inliers, "candidate").map((r) => r * LOW_SPREAD);
+}
