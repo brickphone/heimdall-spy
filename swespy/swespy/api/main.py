@@ -54,10 +54,12 @@ class DummyLocator:
         }
 
     def analyze_bytes(self, contents: bytes) -> dict[str, Any]:
-        _ = contents
+        from swespy.model.imageio import decode_upload, preview_jpeg
+
         return {"person_share": 0.0, "suggested_region": None, "suggest": False,
                 "variants": [{"id": "whole", "region": {"x": 0.0, "y": 0.0, "width": 1.0,
-                                                        "height": 1.0}}]}
+                                                        "height": 1.0}}],
+                "preview": preview_jpeg(decode_upload(contents))}
 
     def locate_events(self, contents: bytes, region: dict[str, float] | None = None,
                       cancelled: Any = lambda: False) -> Any:

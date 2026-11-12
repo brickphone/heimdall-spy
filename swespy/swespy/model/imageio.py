@@ -58,6 +58,20 @@ def decode_upload(contents: bytes) -> Image.Image:
 
 MIN_REGION_FRACTION = 0.05  # Each side at least 5% of the photo.
 MIN_REGION_PX = 64
+PREVIEW_SIDE = 1600  # Longest side of the display preview returned by /analyze.
+
+
+def preview_jpeg(image: Image.Image) -> str:
+    """A JPEG data URL of the decoded (upright, metadata-free) image for display and region
+    drawing, at most ``PREVIEW_SIDE`` px. Browsers that cannot show HEIC use this; region
+    coordinates are relative to the same upright pixels the search uses."""
+    import base64
+
+    small = image.copy()
+    small.thumbnail((PREVIEW_SIDE, PREVIEW_SIDE))
+    out = BytesIO()
+    small.save(out, format="JPEG", quality=85)
+    return "data:image/jpeg;base64," + base64.b64encode(out.getvalue()).decode()
 
 
 def crop_region(image: Image.Image, region: dict[str, float] | None) -> Image.Image:

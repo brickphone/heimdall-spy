@@ -87,3 +87,16 @@ def test_crop_region_normalised_and_validated():
                 {"y": 0, "width": 0.5, "height": 0.5}):
         with pytest.raises(UnsupportedImage):
             crop_region(img, bad)
+
+
+def test_preview_is_upright_small_jpeg_without_metadata() -> None:
+    import base64
+
+    from swespy.model.imageio import PREVIEW_SIDE, preview_jpeg
+
+    image = Image.new("RGB", (4000, 3000), (10, 120, 200))
+    url = preview_jpeg(image)
+    assert url.startswith("data:image/jpeg;base64,")
+    with Image.open(BytesIO(base64.b64decode(url.split(",", 1)[1]))) as out:
+        assert out.format == "JPEG" and max(out.size) == PREVIEW_SIDE
+        assert out.size == (1600, 1200) and not out.getexif()

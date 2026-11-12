@@ -65,4 +65,7 @@ class AnalyzeResponse(BaseModel):
     suggested_region: dict[str, float] | None
     suggest: bool  # People cover more than 30%: pre-draw the suggested region.
     variants: list[dict[str, Any]]
+    # Upright JPEG (data URL, longest side <= 1600 px, no metadata) for display and region
+    # drawing in browsers that cannot show the original (e.g. HEIC in Chrome).
+    preview: str | None = None
     processing_time_ms: float

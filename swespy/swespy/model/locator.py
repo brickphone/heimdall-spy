@@ -337,13 +337,14 @@ class GeoLocator:
     def analyze_bytes(self, contents: bytes) -> dict[str, Any]:
         """Person share and suggested region for an upload, without retrieval."""
         from swespy.model import variants as va
-        from swespy.model.imageio import decode_upload
+        from swespy.model.imageio import decode_upload, preview_jpeg
 
         image = decode_upload(contents)
+        preview = preview_jpeg(image)
         if self.segmenter is None:
             return {"person_share": None, "suggested_region": None, "suggest": False,
-                    "variants": [{"id": "whole", "region": dict(va.FULL)}]}
-        return va.analyze(image, self.segmenter.mask(image))
+                    "variants": [{"id": "whole", "region": dict(va.FULL)}], "preview": preview}
+        return {**va.analyze(image, self.segmenter.mask(image)), "preview": preview}
 
     def locate_events(self, contents: bytes, region: dict[str, float] | None = None,
                       cancelled: Callable[[], bool] = lambda: False) -> Iterator[dict[str, Any]]:
