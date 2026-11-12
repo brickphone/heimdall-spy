@@ -8,7 +8,7 @@ import { LogoMark } from "@/components/Icons";
 import about from "@/generated/about.json";
 import crop from "@/generated/crop_example.json";
 
-export const metadata: Metadata = { title: "How it works · Heimdall" };
+export const metadata: Metadata = { title: "How it works · SweSpy" };
 
 interface Rate {
   count: number;
@@ -47,7 +47,7 @@ export default function About() {
         <header className="flex items-center justify-between gap-4 pb-6">
           <span className="flex items-center gap-3">
             <LogoMark />
-            <span className="text-md font-semibold text-ink">Heimdall</span>
+            <span className="text-md font-semibold text-ink">SweSpy</span>
           </span>
           <Link href="/" className="rounded-control border border-rule-control px-3 py-2 text-control text-ink no-underline hover:bg-paper">
             Back to the map
@@ -56,7 +56,7 @@ export default function About() {
 
         <h1 className="pb-4 text-xl font-semibold tracking-[var(--text-xl--letter-spacing)] text-ink">How it works</h1>
         <P>
-          Heimdall estimates where an outdoor photo taken in Linköping was taken. It compares the
+          SweSpy estimates where an outdoor photo taken in Linköping was taken. It compares the
           photo with a library of street-level photos whose positions are known, and tells you
           how sure it is.
         </P>
@@ -72,7 +72,7 @@ export default function About() {
             <CoverageMap area={about.areaPolygon as [number, number][]} />
             <figcaption className="text-sm text-ink-2">
               Streets with at least one reference photo within 25 m are dotted; the outline is
-              the area Heimdall covers. Where there are no dots, the library has no photo to
+              the area SweSpy covers. Where there are no dots, the library has no photo to
               compare with, so a photo taken there cannot be located well.
             </figcaption>
           </figure>

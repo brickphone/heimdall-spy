@@ -1,30 +1,31 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element -- local blob thumbnails */
+/* eslint-disable @next/next/no-img-element -- local blob and preview thumbnails */
 
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import Link from "next/link";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 
-import Compare from "@/components/Compare";
-import { IconBack, IconClose, IconHelp, IconNew, IconRecent, LogoMark } from "@/components/Icons";
-import LocatingMap, { type LocatingMapHandle, type MapItem } from "@/components/LocatingMap";
+import CompareOverlay from "@/components/CompareOverlay";
+import { IconClose, IconCopy, IconHelp, IconNew, IconRecent, IconSideBySide, IconUpload, LogoMark } from "@/components/Icons";
+import LocatingMap, { type LocatingMapHandle, type MapInsets, type MapItem } from "@/components/LocatingMap";
 import PhotoRegion from "@/components/PhotoRegion";
-import { type Prediction, type Region, UserFacingError, analyze, checkFile } from "@/lib/api";
+import VerdictControl, { type Verdict } from "@/components/Verdict";
+import { type Prediction, type Region, UserFacingError, analyze, checkFile, sourceName } from "@/lib/api";
 import { distanceM, formatCoords, formatDistance, plainCoords } from "@/lib/geo";
 import { type Place, loadPlaces, lookup, placeLabel } from "@/lib/places";
-import { reasonText } from "@/lib/reason";
 import { type CandidatePoint, type StreamEvent, locateStream } from "@/lib/stream";
 
 interface Search {
   id: number;
   file: File;
-  url: string;
+  url: string; // What the browser can display: the file itself, or the API's preview.
   region: Region | null;
   prediction: Prediction;
   places: Place[];
   timings: Timings;
+  verdicts: Record<string, Verdict>; // By reference image id; this session only.
 }
 
 /** Seconds per stage, measured from the arrival of the stream events. */
@@ -45,7 +46,7 @@ type Phase =
   | { kind: "done" };
 
 const STAGES: { key: StageKey; label: string }[] = [
-  { key: "search", label: "Search reference photos" },
+  { key: "search", label: "Search references" },
   { key: "compare", label: "Compare closest matches" },
   { key: "check", label: "Check confidence" },
 ];
@@ -54,18 +55,62 @@ const STAGES: { key: StageKey; label: string }[] = [
 const HOLD = { begin: 900, candidates: 1000, verification: 1200, verified: 180 } as const;
 const HOLD_REDUCED = { begin: 250, candidates: 250, verification: 250, verified: 60 } as const;
 
-// Notes under the photo when Heimdall pre-draws a region.
+// Notes under the photo when SweSpy pre-draws a region.
 const NOTES = {
   person: "Most of this photo is a person. The highlighted area shows the place.",
-  alternative: "Another part of the photo is highlighted. Adjust it or use the whole photo, then locate again.",
+  alternative: "Suggested: another part of the photo.",
 } as const;
 type Note = keyof typeof NOTES;
 
-/** True when the result came from part of the photo rather than all of it. */
-const usedRegion = (p: Prediction) => p.searched_variant === "manual" || p.searched_variant.startsWith("crop:");
+const RIVAL_M = 500; // swespy.model.rerank.DISAGREE_M: a different place.
+const NO_INSETS: MapInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 
+const SEARCHED: Record<string, string> = {
+  whole: "Whole photo",
+  manual: "Your region",
+  masked: "Automatic: people masked",
+  "crop:left": "Automatic: left part",
+  "crop:right": "Automatic: right part",
+  "crop:center": "Automatic: centre part",
+  "crop:band": "Automatic: middle band",
+  "crop:clean": "Automatic: area without people",
+};
+
+const isHeic = (f: File) => /^image\/hei[cf]$/.test(f.type) || /\.hei[cf]$/i.test(f.name);
 const reducedMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const total = (t: Timings) => (t.search ?? 0) + (t.compare ?? 0) + (t.check ?? 0);
+
+/** Screen space covered by the floating rail and inspector, measured live. */
+function useInsets(rail: RefObject<HTMLElement | null>, panel: RefObject<HTMLElement | null>): MapInsets {
+  const [insets, setInsets] = useState<MapInsets>(NO_INSETS);
+  useEffect(() => {
+    const measure = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const r = rail.current?.getBoundingClientRect();
+      const p = panel.current?.getBoundingClientRect();
+      const gap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--spacing-inset")) || 12;
+      const side = Boolean(p && p.height > h * 0.8); // Desktop: a full-height side panel.
+      setInsets({
+        top: gap,
+        left: r && r.width ? Math.round(r.right + gap) : gap,
+        right: side && p ? Math.round(w - p.left + gap) : gap,
+        bottom: !side && p ? Math.round(h - p.top + gap) : gap,
+      });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (rail.current) ro.observe(rail.current);
+    if (panel.current) ro.observe(panel.current);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [rail, panel]);
+  return insets;
+}
 
 export default function Workspace({ references, area }: { references: number; area: [number, number][] }) {
   const [file, setFile] = useState<File | null>(null);
@@ -77,15 +122,18 @@ export default function Workspace({ references, area }: { references: number; ar
   const [result, setResult] = useState<Search | null>(null);
   const [selected, setSelected] = useState(0);
   const [recent, setRecent] = useState<Search[]>([]);
-  const [compareOpen, setCompareOpen] = useState(false);
+  const [comparing, setComparing] = useState<number | null>(null);
   const [timings, setTimings] = useState<Timings>({ search: null, compare: null, check: null });
   const [emptyError, setEmptyError] = useState<string | null>(null);
   const [note, setNote] = useState<Note | null>(null);
   const mapRef = useRef<LocatingMapHandle>(null);
+  const railRef = useRef<HTMLElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
   const photoRef = useRef<HTMLDivElement>(null);
   const abort = useRef<AbortController | null>(null);
   const analyzing = useRef<AbortController | null>(null);
   const runId = useRef(0);
+  const insets = useInsets(railRef, panelRef);
 
   useEffect(() => {
     void loadPlaces(); // Warm the place-name index while the user picks a photo.
@@ -104,23 +152,30 @@ export default function Workspace({ references, area }: { references: number; ar
     mapRef.current?.reset();
     setEmptyError(null);
     setFile(f);
-    setUrl(URL.createObjectURL(f));
+    // HEIC: Chrome cannot show it; wait for the API's upright JPEG preview.
+    setUrl(isHeic(f) ? null : URL.createObjectURL(f));
     setRegion(null);
     setNote(null);
     setEditing(true);
     setNoPreview(false);
     setResult(null);
+    setComparing(null);
     setPhase({ kind: "ready" });
     suggest(f);
   }
 
-  /** Ask the API whether people dominate the photo; if so, pre-draw the place. */
+  /** People share, the suggested region and a display preview, before searching. */
   function suggest(f: File) {
     analyzing.current?.abort();
     const controller = new AbortController();
     analyzing.current = controller;
     void analyze(f, controller.signal).then((a) => {
-      if (controller.signal.aborted || !a?.suggest || !a.suggested_region) return;
+      if (controller.signal.aborted) return;
+      if (isHeic(f)) {
+        if (a?.preview) setUrl(a.preview);
+        else setNoPreview(true);
+      }
+      if (!a?.suggest || !a.suggested_region) return;
       const suggested = a.suggested_region;
       // Never replace a region the user has drawn in the meantime.
       setRegion((current) => {
@@ -136,16 +191,6 @@ export default function Workspace({ references, area }: { references: number; ar
     analyzing.current = null;
   }
 
-  /** Low confidence: open region selection with the best automatic alternative drawn. */
-  function tryDifferentRegion() {
-    if (!result) return;
-    stopAnalyze();
-    setRegion(result.prediction.alternative_region);
-    setNote(result.prediction.alternative_region ? "alternative" : null);
-    setEditing(true);
-    photoRef.current?.scrollIntoView({ block: "nearest", behavior: reducedMotion() ? "auto" : "smooth" });
-  }
-
   function stopRun() {
     runId.current++;
     abort.current?.abort();
@@ -155,12 +200,13 @@ export default function Workspace({ references, area }: { references: number; ar
   function reset() {
     stopRun();
     stopAnalyze();
-    setNote(null);
     mapRef.current?.reset();
     setFile(null);
     setUrl(null);
     setRegion(null);
+    setNote(null);
     setResult(null);
+    setComparing(null);
     setEmptyError(null);
     setPhase({ kind: "empty" });
   }
@@ -179,12 +225,24 @@ export default function Workspace({ references, area }: { references: number; ar
     setEditing(true);
   }
 
+  /** Low confidence: open region selection with the best automatic alternative drawn. */
+  function tryDifferentRegion() {
+    if (!result) return;
+    stopAnalyze();
+    setComparing(null);
+    setRegion(result.prediction.alternative_region);
+    setNote(result.prediction.alternative_region ? "alternative" : null);
+    setEditing(true);
+    photoRef.current?.scrollIntoView({ block: "nearest", behavior: reducedMotion() ? "auto" : "smooth" });
+  }
+
   /** Locate: stream events into a queue and play them, each phase held long enough. */
   async function locate() {
-    if (!file || !url) return;
+    if (!file || (!url && !noPreview)) return;
     stopRun();
     stopAnalyze();
     setNote(null);
+    setComparing(null);
     const id = runId.current;
     const controller = new AbortController();
     abort.current = controller;
@@ -212,7 +270,7 @@ export default function Workspace({ references, area }: { references: number; ar
     })
       .catch((err) => {
         if (!controller.signal.aborted) {
-          failure = err instanceof UserFacingError ? err.message : "Something went wrong while locating. Try again.";
+          failure = err instanceof UserFacingError ? err.message : "Locating failed. Try again.";
         }
       })
       .finally(() => {
@@ -221,7 +279,6 @@ export default function Workspace({ references, area }: { references: number; ar
       });
 
     let nextAt = performance.now() + hold.begin;
-    let top: CandidatePoint[] = [];
     let candidates: CandidatePoint[] = [];
     const places = loadPlaces();
     while (live()) {
@@ -242,9 +299,8 @@ export default function Workspace({ references, area }: { references: number; ar
         mapRef.current?.candidates(ev.items);
         nextAt = performance.now() + hold.candidates;
       } else if (ev.type === "stage" && ev.stage === "verification") {
-        top = candidates.slice(0, ev.count);
         setPhase({ kind: "locating", stage: "compare", label: `Comparing the ${ev.count} closest matches` });
-        mapRef.current?.verifying(top);
+        mapRef.current?.verifying(candidates.slice(0, ev.count));
         nextAt = performance.now() + hold.verification;
       } else if (ev.type === "verified") {
         mapRef.current?.verified(ev.id, ev.inliers);
@@ -262,7 +318,9 @@ export default function Workspace({ references, area }: { references: number; ar
         const index = await places;
         if (!live()) return;
         const at = [{ lat: prediction.predicted_lat, lng: prediction.predicted_lng }, ...prediction.top_matches.slice(1)];
-        const search: Search = { id, file, url, region, prediction, places: at.map((p) => lookup(index, p)), timings: done };
+        const search: Search = {
+          id, file, url: url ?? "", region, prediction, places: at.map((p) => lookup(index, p)), timings: done, verdicts: {},
+        };
         mapRef.current?.result(mapItems(search), prediction.confidence_state);
         setResult(search);
         setSelected(0);
@@ -278,15 +336,17 @@ export default function Workspace({ references, area }: { references: number; ar
     await fetching;
     if (!live()) return;
     mapRef.current?.fail();
-    setPhase({ kind: "error", message: failure ?? "The search ended without a result. Try again." });
+    setPhase({ kind: "error", message: failure ?? "No result returned. Try again." });
   }
 
   function restore(s: Search) {
     stopRun();
     stopAnalyze();
     setNote(null);
+    setComparing(null);
     setFile(s.file);
-    setUrl(s.url);
+    setUrl(s.url || null);
+    setNoPreview(!s.url);
     setRegion(s.region);
     setEditing(false);
     setResult(s);
@@ -296,9 +356,26 @@ export default function Workspace({ references, area }: { references: number; ar
     mapRef.current?.result(mapItems(s), s.prediction.confidence_state);
   }
 
-  function selectCandidate(index: number) {
+  const selectCandidate = useCallback((index: number) => {
     setSelected(index);
     mapRef.current?.select(index);
+  }, []);
+
+  const openCompare = useCallback((index: number) => {
+    setSelected(index);
+    mapRef.current?.select(index);
+    setComparing(index);
+  }, []);
+
+  /** Store a verdict on the current result and on its entry in recent searches. */
+  function setVerdict(imageId: string, v: Verdict | undefined) {
+    if (!result) return;
+    const verdicts = { ...result.verdicts };
+    if (v) verdicts[imageId] = v;
+    else delete verdicts[imageId];
+    const next = { ...result, verdicts };
+    setResult(next);
+    setRecent((list) => list.map((s) => (s.id === next.id ? next : s)));
   }
 
   const locating = phase.kind === "locating";
@@ -315,65 +392,31 @@ export default function Workspace({ references, area }: { references: number; ar
     return "pending";
   };
 
-  const photo = file && (
-    <div ref={photoRef}>
-      <PhotoSection
-        url={url}
-        region={region}
-        searched={result && !locating ? result.prediction.searched_region : null}
-        note={note && editing && !locating ? NOTES[note] : null}
-        editing={editing && !locating}
-        noPreview={noPreview}
-        hasResult={Boolean(result)}
-        locating={locating}
-        onRegion={setRegion}
-        onWhole={() => {
-          stopAnalyze();
-          setRegion(null);
-          setNote(null);
-        }}
-        onChangeRegion={() => setEditing(true)}
-        onLocate={() => void locate()}
-        onUnavailable={() => {
-          setNoPreview(true);
-          setEditing(false);
-        }}
-      />
-    </div>
-  );
-
-  // The stage list is shown while locating (and after an error); with a result it
-  // collapses into the "Located in" line in the header.
-  const stages = file && (locating || phase.kind === "error") && (
-    <Section>
-      <StageList state={stageState} timings={timings} />
-    </Section>
-  );
-
-  const results = result && (
-    <div className={`desk:contents ${locating ? "pointer-events-none opacity-40" : ""}`} inert={locating}>
-      <div className="hidden desk:contents">
-        <ResultSection search={result} onTryRegion={tryDifferentRegion} />
-        <Section title="Your region and the match">
-          <CompareFor search={result} selected={selected} />
-        </Section>
-        <Candidates search={result} selected={selected} onSelect={selectCandidate} />
-      </div>
-      <div className="desk:hidden">
-        <MobileResult search={result} onCompare={() => setCompareOpen(true)} onTryRegion={tryDifferentRegion} />
-        <Candidates search={result} selected={selected} onSelect={selectCandidate} />
-      </div>
-      <Section title="Stage timings">
-        <StageList state={() => "done"} timings={result.timings} />
-      </Section>
-    </div>
-  );
+  const overlayStyle: CSSProperties = { top: insets.top, left: insets.left, right: insets.right, bottom: insets.bottom };
+  const compareMatch = result && comparing !== null ? result.prediction.top_matches[comparing] : null;
 
   return (
     <Tooltip.Provider delayDuration={300}>
-      <div className="flex h-full flex-col desk:grid desk:grid-cols-[var(--spacing-rail)_1fr_var(--spacing-inspector)]">
-        <nav aria-label="Workspace" className="hidden flex-col items-center gap-2 border-r border-rule bg-surface py-4 desk:flex">
-          <div className="mb-4" title="Heimdall">
+      <div className="relative h-full overflow-hidden text-sm text-ink">
+        {/* The map is the workspace: full-bleed under the floating panels. */}
+        <div className="absolute inset-0">
+          <LocatingMap
+            ref={mapRef}
+            area={area}
+            status={status}
+            insets={insets}
+            onSelect={selectCandidate}
+            onCompare={openCompare}
+            onDropFile={choose}
+          />
+        </div>
+
+        <nav
+          ref={railRef}
+          aria-label="Workspace"
+          className="absolute bottom-inset left-inset top-inset z-20 hidden w-rail flex-col items-center gap-1 rounded-panel border border-rule bg-surface py-2 shadow-[var(--shadow-panel)] desk:flex"
+        >
+          <div className="mb-2 grid size-9 place-items-center" title="SweSpy">
             <LogoMark />
           </div>
           <RailButton label="New search" onClick={reset}>
@@ -383,7 +426,7 @@ export default function Workspace({ references, area }: { references: number; ar
           <div className="mt-auto">
             <Tooltip.Root>
               <Tooltip.Trigger asChild>
-                <Link href="/about" aria-label="How it works" className="grid size-touch place-items-center rounded-control text-ink hover:bg-paper">
+                <Link href="/about" aria-label="How it works" className="grid size-9 place-items-center rounded-control text-ink hover:bg-paper">
                   <IconHelp />
                 </Link>
               </Tooltip.Trigger>
@@ -392,67 +435,77 @@ export default function Workspace({ references, area }: { references: number; ar
           </div>
         </nav>
 
-        <div className="relative h-map-mobile shrink-0 desk:h-full">
-          <LocatingMap
-            ref={mapRef}
-            area={area}
-            dimmed={locating}
-            status={status}
-            onSelect={selectCandidate}
-            onDropFile={choose}
-          />
-          {phase.kind !== "empty" && (
-            <button
-              type="button"
-              onClick={reset}
-              aria-label="New photo"
-              className="absolute bottom-10 left-3 grid size-touch place-items-center rounded-control border border-rule-control bg-surface text-ink desk:hidden"
-            >
-              <IconBack />
-            </button>
-          )}
-        </div>
-
         <aside
+          ref={panelRef}
           aria-label="Inspector"
-          className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto rounded-t-sheet border-t border-rule bg-surface desk:rounded-none desk:border-l desk:border-t-0"
+          className="absolute inset-x-inset bottom-inset z-20 flex max-h-sheet flex-col overflow-y-auto rounded-panel border border-rule bg-surface shadow-[var(--shadow-panel)] desk:left-auto desk:top-inset desk:max-h-none desk:w-inspector"
         >
-          <span className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-control bg-rule desk:hidden" aria-hidden="true" />
           {!file && <EmptyState references={references} onFile={choose} error={emptyError} />}
           {file && (
             <>
-              <Section>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h1 className="truncate text-body font-semibold text-ink">{file.name}</h1>
-                    <LocatedLine phase={phase} timings={timings} hasResult={Boolean(result)} />
-                  </div>
-                  <button type="button" onClick={reset} className="shrink-0 rounded-control border border-rule-control px-3 py-2 text-control text-ink hover:bg-paper">
-                    New photo
-                  </button>
+              <header className="flex items-center gap-2 border-b border-rule px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <h1 className="truncate text-sm font-medium text-ink">{file.name}</h1>
+                  <PhaseLine phase={phase} hasResult={Boolean(result)} />
                 </div>
-              </Section>
-              {photo}
-              {stages}
-              {results}
+                <button type="button" onClick={reset} aria-label="New photo" title="New photo" className="grid size-8 shrink-0 place-items-center rounded-control border border-rule-control text-ink hover:bg-paper">
+                  <IconNew />
+                </button>
+              </header>
+              <div ref={photoRef}>
+                <PhotoSection
+                  url={url}
+                  heicPending={isHeic(file) && !url && !noPreview}
+                  region={region}
+                  searched={result && !locating ? result.prediction.searched_region : null}
+                  note={note && editing && !locating ? NOTES[note] : null}
+                  editing={editing && !locating}
+                  noPreview={noPreview}
+                  hasResult={Boolean(result)}
+                  locating={locating}
+                  onRegion={setRegion}
+                  onWhole={() => {
+                    stopAnalyze();
+                    setRegion(null);
+                    setNote(null);
+                  }}
+                  onChangeRegion={() => setEditing(true)}
+                  onLocate={() => void locate()}
+                  onUnavailable={() => {
+                    setNoPreview(true);
+                    setEditing(false);
+                  }}
+                />
+              </div>
+              {(locating || phase.kind === "error") && (
+                <Section>
+                  <StageList state={stageState} timings={timings} />
+                </Section>
+              )}
+              {result && (
+                <div className={locating ? "pointer-events-none opacity-40" : ""} inert={locating}>
+                  <ResultBlock search={result} onCompare={() => openCompare(0)} onTryRegion={tryDifferentRegion} />
+                  <Candidates search={result} selected={selected} onSelect={selectCandidate} onCompare={openCompare} onVerdict={setVerdict} />
+                </div>
+              )}
             </>
           )}
         </aside>
-      </div>
 
-      <Dialog.Root open={compareOpen} onOpenChange={setCompareOpen}>
-        <Dialog.Portal>
-          <Dialog.Content className="fixed inset-0 z-50 flex flex-col gap-4 bg-surface p-4" aria-describedby={undefined}>
-            <div className="flex items-center justify-between">
-              <Dialog.Title className="text-md font-semibold text-ink">Your region and the match</Dialog.Title>
-              <Dialog.Close aria-label="Close" className="grid size-touch place-items-center rounded-control border border-rule-control text-ink">
-                <IconClose />
-              </Dialog.Close>
-            </div>
-            {result && <CompareFor search={result} selected={selected} tall />}
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+        {result && compareMatch && result.url && (
+          <CompareOverlay
+            photoUrl={result.url}
+            region={result.prediction.searched_region ?? result.region}
+            match={compareMatch}
+            place={placeLabel(result.places[comparing ?? 0])}
+            predicted={{ lat: result.prediction.predicted_lat, lng: result.prediction.predicted_lng }}
+            verdict={result.verdicts[compareMatch.image_id]}
+            onVerdict={(v) => setVerdict(compareMatch.image_id, v)}
+            onClose={() => setComparing(null)}
+            style={overlayStyle}
+          />
+        )}
+      </div>
     </Tooltip.Provider>
   );
 }
@@ -470,12 +523,26 @@ function mapItems(s: Search): MapItem[] {
 
 // ---------------------------------------------------------------- pieces
 
-function Section({ title, children, className = "" }: { title?: string; children: ReactNode; className?: string }) {
+function Section({ title, children }: { title?: string; children: ReactNode }) {
   return (
-    <section className={`flex flex-col gap-3 border-b border-rule px-5 py-4 ${className}`}>
-      {title && <h2 className="text-sm font-medium text-ink-2">{title}</h2>}
+    <section className="flex flex-col gap-2 border-b border-rule px-3 py-3 last:border-b-0">
+      {title && <h2 className="text-xs font-semibold text-ink-2">{title}</h2>}
       {children}
     </section>
+  );
+}
+
+/** Label–value rows: label 12 px secondary on the left, value 13 px tabular on the right. */
+function KeyValues({ rows }: { rows: [string, ReactNode][] }) {
+  return (
+    <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+      {rows.map(([k, v]) => (
+        <div key={k} className="contents">
+          <dt className="text-xs leading-5 text-ink-2">{k}</dt>
+          <dd className="truncate text-right text-sm leading-5 text-ink">{v}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -490,16 +557,16 @@ function ProgressArc() {
 
 function StatusLabel({ text, error, onCancel, onRetry }: { text: string; error?: boolean; onCancel?: () => void; onRetry?: () => void }) {
   return (
-    <div role="status" aria-live="polite" className="flex max-w-sm items-center gap-3 border-[0.9px] border-ink bg-surface px-3 py-2">
+    <div role="status" aria-live="polite" className="flex max-w-sm items-center gap-3 rounded-control border border-ink bg-surface px-3 py-1.5">
       {!error && <ProgressArc />}
-      <span className={`text-control ${error ? "text-danger" : "text-ink"}`}>{text}</span>
+      <span className={`text-sm ${error ? "text-danger" : "text-ink"}`}>{text}</span>
       {onCancel && (
-        <button type="button" onClick={onCancel} className="ml-1 text-control font-medium text-pin underline underline-offset-2 hover:text-pin-hover">
+        <button type="button" onClick={onCancel} className="ml-1 text-sm font-medium text-pin underline underline-offset-2 hover:text-pin-hover">
           Cancel
         </button>
       )}
       {onRetry && (
-        <button type="button" onClick={onRetry} className="ml-1 shrink-0 text-control font-medium text-pin underline underline-offset-2 hover:text-pin-hover">
+        <button type="button" onClick={onRetry} className="ml-1 shrink-0 text-sm font-medium text-pin underline underline-offset-2 hover:text-pin-hover">
           Try again
         </button>
       )}
@@ -509,18 +576,18 @@ function StatusLabel({ text, error, onCancel, onRetry }: { text: string; error?:
 
 function StageMarker({ state }: { state: StageState }) {
   if (state === "active") return <ProgressArc />;
-  return <span className={`size-3 shrink-0 border border-ink ${state === "done" ? "bg-ink" : "bg-surface"}`} aria-hidden="true" />;
+  return <span className={`size-2.5 shrink-0 border border-ink ${state === "done" ? "bg-ink" : "bg-surface"}`} aria-hidden="true" />;
 }
 
 function StageList({ state, timings }: { state: (k: StageKey) => StageState; timings: Timings }) {
   return (
-    <ol className="flex flex-col gap-2" aria-label="Progress">
+    <ol className="flex flex-col gap-1.5" aria-label="Progress">
       {STAGES.map(({ key, label }) => (
-        <li key={key} className="flex items-center gap-3 text-body">
+        <li key={key} className="flex items-center gap-2.5 text-sm">
           <StageMarker state={state(key)} />
           <span className={state(key) === "pending" ? "text-ink-2" : "text-ink"}>{label}</span>
-          <span className="ml-auto text-sm text-ink-2">
-            {timings[key] !== null ? `${timings[key]!.toFixed(1)} s` : state(key) === "active" ? "running" : ""}
+          <span className="ml-auto text-xs text-ink-2">
+            {timings[key] !== null ? `${timings[key]!.toFixed(1)} s` : state(key) === "active" ? "Running" : ""}
           </span>
           <span className="sr-only">{state(key)}</span>
         </li>
@@ -529,14 +596,11 @@ function StageList({ state, timings }: { state: (k: StageKey) => StageState; tim
   );
 }
 
-/** "Located in 4.1 s" once a result exists; the stage timings close the inspector. */
-function LocatedLine({ phase, timings, hasResult }: { phase: Phase; timings: Timings; hasResult: boolean }) {
-  if (phase.kind === "locating") return <p className="text-sm text-ink-2">Locating…</p>;
-  if (phase.kind === "ready") return <p className="text-sm text-ink-2">{hasResult ? "Change the region, then locate again." : "Ready to locate."}</p>;
-  if (phase.kind === "error") return <p className="text-sm text-danger">Not located</p>;
-  if (!hasResult || timings.search === null) return null;
-  const total = (timings.search ?? 0) + (timings.compare ?? 0) + (timings.check ?? 0);
-  return <p className="text-sm text-ink-2">Located in {total.toFixed(1)} s</p>;
+function PhaseLine({ phase, hasResult }: { phase: Phase; hasResult: boolean }) {
+  const text =
+    phase.kind === "locating" ? "Locating" : phase.kind === "error" ? "Not located" : phase.kind === "ready" ? (hasResult ? "Region changed" : "Ready") : null;
+  if (!text) return null;
+  return <p className={`text-xs ${phase.kind === "error" ? "text-danger" : "text-ink-2"}`}>{text}</p>;
 }
 
 function TipContent({ children }: { children: ReactNode }) {
@@ -553,7 +617,7 @@ function RailButton({ label, onClick, children }: { label: string; onClick: () =
   return (
     <Tooltip.Root>
       <Tooltip.Trigger asChild>
-        <button type="button" aria-label={label} onClick={onClick} className="grid size-touch place-items-center rounded-control text-ink hover:bg-paper">
+        <button type="button" aria-label={label} onClick={onClick} className="grid size-9 place-items-center rounded-control text-ink hover:bg-paper">
           {children}
         </button>
       </Tooltip.Trigger>
@@ -567,40 +631,46 @@ function RecentSearches({ recent, onRestore }: { recent: Search[]; onRestore: (s
     <Dialog.Root>
       <Tooltip.Root>
         <Tooltip.Trigger asChild>
-          <Dialog.Trigger aria-label="Recent searches" className="grid size-touch place-items-center rounded-control text-ink hover:bg-paper">
+          <Dialog.Trigger aria-label="Recent searches" className="grid size-9 place-items-center rounded-control text-ink hover:bg-paper">
             <IconRecent />
           </Dialog.Trigger>
         </Tooltip.Trigger>
         <TipContent>Recent searches</TipContent>
       </Tooltip.Root>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-scrim" />
-        <Dialog.Content className="fixed left-rail top-0 z-50 flex h-full w-inspector flex-col border-r border-rule bg-surface" aria-describedby={undefined}>
-          <div className="flex items-center justify-between border-b border-rule px-5 py-4">
-            <Dialog.Title className="text-body font-semibold text-ink">Recent searches</Dialog.Title>
-            <Dialog.Close aria-label="Close" className="grid size-touch place-items-center rounded-control text-ink hover:bg-paper">
+        <Dialog.Content
+          className="fixed bottom-inset top-inset z-50 flex w-inspector flex-col overflow-hidden rounded-panel border border-rule bg-surface text-sm shadow-[var(--shadow-panel)]"
+          style={{ left: "calc(var(--spacing-inset) * 2 + var(--spacing-rail))" }}
+          aria-describedby={undefined}
+        >
+          <div className="flex items-center justify-between border-b border-rule px-3 py-2">
+            <Dialog.Title className="text-sm font-semibold text-ink">Recent searches</Dialog.Title>
+            <Dialog.Close aria-label="Close" className="grid size-8 place-items-center rounded-control text-ink hover:bg-paper">
               <IconClose />
             </Dialog.Close>
           </div>
-          <p className="px-5 py-3 text-sm text-ink-2">Kept for this session only. Closing the tab clears them.</p>
-          {recent.length === 0 && <p className="px-5 text-body text-ink-2">No searches yet.</p>}
-          <ul className="flex flex-col">
-            {recent.map((s) => (
-              <li key={s.id} className="border-b border-rule-list">
-                <Dialog.Close asChild>
-                  <button type="button" onClick={() => onRestore(s)} className="flex w-full items-center gap-3 px-5 py-3 text-left hover:bg-paper">
-                    <img src={s.url} alt="" className="size-touch object-cover" />
-                    <span className="min-w-0">
-                      <span className="block truncate text-body font-medium text-ink">{placeLabel(s.places[0])}</span>
-                      <span className="block truncate text-sm text-ink-2">
-                        {s.file.name}
-                        {s.region ? ", region" : ""}
+          <p className="px-3 py-2 text-xs text-ink-2">This session only</p>
+          {recent.length === 0 && <p className="px-3 text-sm text-ink-2">No searches yet</p>}
+          <ul className="flex flex-col overflow-y-auto">
+            {recent.map((s) => {
+              const judged = Object.keys(s.verdicts).length;
+              return (
+                <li key={s.id} className="border-b border-rule-list">
+                  <Dialog.Close asChild>
+                    <button type="button" onClick={() => onRestore(s)} className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-paper">
+                      {s.url ? <img src={s.url} alt="" className="size-9 rounded-square object-cover" /> : <span className="size-9 rounded-square bg-rule-list" />}
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium text-ink">{placeLabel(s.places[0])}</span>
+                        <span className="block truncate text-xs text-ink-2">
+                          {s.file.name}
+                          {judged ? `, ${judged} verdict${judged > 1 ? "s" : ""}` : ""}
+                        </span>
                       </span>
-                    </span>
-                  </button>
-                </Dialog.Close>
-              </li>
-            ))}
+                    </button>
+                  </Dialog.Close>
+                </li>
+              );
+            })}
           </ul>
         </Dialog.Content>
       </Dialog.Portal>
@@ -612,13 +682,15 @@ function EmptyState({ references, onFile, error }: { references: number; onFile:
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
   return (
-    <div className="flex flex-1 flex-col">
-      <div className="flex flex-col gap-5 px-5 py-6">
-        <h1 className="text-lg font-semibold text-ink desk:text-xl desk:tracking-[var(--text-xl--letter-spacing)]">Where was this photo taken?</h1>
-        <p className="text-md text-ink">
-          Heimdall compares your photo with {references.toLocaleString("en-US")} street-level
-          reference photos of Linköping and shows where it was most likely taken, and how sure it is.
-        </p>
+    <div className="flex flex-col">
+      <header className="flex items-center gap-2 border-b border-rule px-3 py-2">
+        <span className="desk:hidden">
+          <LogoMark />
+        </span>
+        <h1 className="text-sm font-semibold text-ink">SweSpy</h1>
+        <span className="text-xs text-ink-2">Locate a photo</span>
+      </header>
+      <Section>
         <div
           onDragOver={(e) => {
             e.preventDefault();
@@ -630,7 +702,7 @@ function EmptyState({ references, onFile, error }: { references: number; onFile:
             setOver(false);
             onFile(e.dataTransfer.files[0] ?? null);
           }}
-          className={`flex flex-col items-start gap-3 border border-dashed p-5 ${over ? "border-pin bg-selected" : "border-rule-control"}`}
+          className={`flex flex-col items-start gap-2 rounded-control border border-dashed p-3 ${over ? "border-pin bg-selected" : "border-rule-control"}`}
         >
           <input
             ref={input}
@@ -644,30 +716,32 @@ function EmptyState({ references, onFile, error }: { references: number; onFile:
               e.target.value = "";
             }}
           />
-          <button type="button" onClick={() => input.current?.click()} className="h-touch rounded-control bg-pin px-5 text-control font-medium text-surface hover:bg-pin-hover">
+          <button type="button" onClick={() => input.current?.click()} className="flex h-8 items-center gap-2 rounded-control bg-pin px-3 text-sm font-medium text-surface hover:bg-pin-hover">
+            <IconUpload />
             Choose a photo
           </button>
-          <p className="text-sm text-ink-2">Or drop it here or on the map. JPEG, PNG or HEIC, taken outdoors in Linköping.</p>
+          <p className="text-xs text-ink-2">Or drop it here or on the map</p>
         </div>
-        {error && <p role="alert" className="text-body text-danger">{error}</p>}
-      </div>
-      <Section title="Before you start">
-        <p className="text-body text-ink">Location data in the file, such as GPS, is ignored.</p>
-        <p className="text-body text-ink">Your photo is processed in memory and not stored.</p>
-        <p className="text-body text-ink">
-          It works best when buildings or streets fill the frame. Otherwise, select the part of
-          the photo that shows the place before you locate it.
-        </p>
+        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       </Section>
-      <footer className="mt-auto flex justify-end px-5 py-4 text-sm">
-        <Link href="/about">How it works</Link>
-      </footer>
+      <Section title="Details">
+        <KeyValues
+          rows={[
+            ["Formats", "JPEG, PNG, HEIC, up to 10 MB"],
+            ["Coverage", "Central Linköping"],
+            ["References", references.toLocaleString("en-US")],
+            ["GPS in the file", "Ignored"],
+            ["Storage", "In memory only"],
+          ]}
+        />
+      </Section>
     </div>
   );
 }
 
 function PhotoSection(props: {
   url: string | null;
+  heicPending: boolean;
   region: Region | null;
   searched: Region | null;
   note: string | null;
@@ -681,33 +755,35 @@ function PhotoSection(props: {
   onLocate: () => void;
   onUnavailable: () => void;
 }) {
-  const { url, region, editing, noPreview, hasResult, locating } = props;
-  const canLocate = !locating && (!hasResult || editing);
+  const { url, region, editing, noPreview, hasResult, locating, heicPending } = props;
+  const canLocate = !locating && !heicPending && (!hasResult || editing || noPreview);
   return (
     <section className="flex flex-col border-b border-rule">
-      <PhotoRegion src={url} region={region} editing={editing} searched={props.searched} onChange={props.onRegion} onUnavailable={props.onUnavailable} />
-      <div className="flex flex-col gap-3 px-5 py-3">
-        {props.note && !noPreview && <p className="text-body text-ink">{props.note}</p>}
-        {editing && !noPreview && (
-          <p className="text-sm text-ink-2">
-            {region
-              ? "Only the highlighted region is searched. Drag its edges to change it."
-              : "Drag a box around the part that shows the place, or locate the whole photo."}
-          </p>
+      {heicPending ? (
+        <p className="grid h-photo place-items-center bg-rule-list text-xs text-ink-2">Preparing preview</p>
+      ) : noPreview ? (
+        <p className="grid h-photo place-items-center bg-rule-list px-4 text-center text-xs text-ink-2">No preview. The whole photo is searched.</p>
+      ) : (
+        <PhotoRegion src={url} region={region} editing={editing} searched={props.searched} onChange={props.onRegion} onUnavailable={props.onUnavailable} />
+      )}
+      <div className="flex flex-col gap-2 px-3 py-2">
+        {props.note && !noPreview && <p className="text-xs text-ink">{props.note}</p>}
+        {editing && !noPreview && !heicPending && !props.note && (
+          <p className="text-xs text-ink-2">{region ? "Drag the edges to adjust" : "Drag to select the part that shows the place"}</p>
         )}
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           {canLocate && (
-            <button type="button" onClick={props.onLocate} className="h-touch rounded-control bg-pin px-5 text-control font-medium text-surface hover:bg-pin-hover">
+            <button type="button" onClick={props.onLocate} className="h-8 rounded-control bg-pin px-3 text-sm font-medium text-surface hover:bg-pin-hover">
               Locate
             </button>
           )}
-          {hasResult && !editing && !locating && (
-            <button type="button" onClick={props.onChangeRegion} disabled={noPreview} className="h-touch rounded-control border border-rule-control px-3 text-control text-ink hover:bg-paper disabled:text-ink-2">
+          {hasResult && !editing && !locating && !noPreview && (
+            <button type="button" onClick={props.onChangeRegion} className="h-8 rounded-control border border-rule-control px-3 text-sm text-ink hover:bg-paper">
               Change region
             </button>
           )}
-          {editing && (
-            <button type="button" onClick={props.onWhole} disabled={!region} className="h-touch rounded-control border border-rule-control px-3 text-control text-ink hover:bg-paper disabled:text-ink-2">
+          {editing && !noPreview && !heicPending && (
+            <button type="button" onClick={props.onWhole} disabled={!region} className="h-8 rounded-control border border-rule-control px-3 text-sm text-ink hover:bg-paper disabled:text-ink-2">
               Use whole photo
             </button>
           )}
@@ -717,125 +793,133 @@ function PhotoSection(props: {
   );
 }
 
-function StateLine({ state }: { state: string }) {
-  const ok = state === "ok";
-  return (
-    <p className={`flex items-center gap-2 text-body font-medium ${ok ? "text-sure" : "text-unsure"}`}>
-      <span className={`size-state ${ok ? "bg-sure" : "bg-unsure"}`} aria-hidden="true" />
-      {ok ? "Confident" : "Low confidence"}
-    </p>
-  );
-}
-
-function CopyButton({ text, tall }: { text: string; tall?: boolean }) {
+function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
       type="button"
+      aria-label={copied ? "Copied" : "Copy coordinates"}
+      title={copied ? "Copied" : "Copy coordinates"}
       onClick={async () => {
         await navigator.clipboard?.writeText(text);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       }}
-      className={`rounded-control border border-rule-control px-2 text-sm text-ink hover:bg-paper ${tall ? "h-touch flex-1 text-control" : "py-0.5"}`}
+      className={`grid size-7 place-items-center rounded-control hover:bg-paper ${copied ? "text-sure" : "text-ink-2 hover:text-ink"}`}
     >
-      {copied ? "Copied" : "Copy"}
+      <IconCopy />
     </button>
   );
 }
 
-function TryRegionButton({ onClick, tall }: { onClick: () => void; tall?: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`h-touch rounded-control border border-rule-control px-3 text-control text-ink hover:bg-paper ${tall ? "flex-1" : "self-start"}`}
-    >
-      Try a different region
-    </button>
-  );
-}
-
-function ResultSection({ search, onTryRegion }: { search: Search; onTryRegion: () => void }) {
+/** State, place, coordinates and the facts behind them, as label–value rows. */
+function ResultBlock({ search, onCompare, onTryRegion }: { search: Search; onCompare: () => void; onTryRegion: () => void }) {
   const p = search.prediction;
   const at = { lat: p.predicted_lat, lng: p.predicted_lng };
-  const low = p.confidence_state !== "ok";
+  const ok = p.confidence_state === "ok";
+  const [top, ...others] = p.top_matches;
+  const rival = others
+    .filter((m) => distanceM(top, m) > RIVAL_M)
+    .sort((a, b) => (b.inliers ?? 0) - (a.inliers ?? 0))[0];
+  const ref = [
+    top.source === "gsv" ? "Google Street View, © Google" : sourceName(top.source),
+    top.capture_year ? String(top.capture_year) : null,
+    `${formatDistance(distanceM(top, at))} away`,
+  ]
+    .filter(Boolean)
+    .join(", ");
   return (
     <Section>
-      <StateLine state={p.confidence_state} />
-      <h2 className="text-xl font-semibold tracking-[var(--text-xl--letter-spacing)] text-ink">{placeLabel(search.places[0])}</h2>
-      <p className="flex items-center gap-3 text-sm text-ink-2">
-        {formatCoords(at)}
-        <CopyButton text={plainCoords(at)} />
+      <p className={`flex items-center gap-2 text-xs font-semibold ${ok ? "text-sure" : "text-unsure"}`}>
+        <span className={`size-state ${ok ? "bg-sure" : "bg-unsure"}`} aria-hidden="true" />
+        {ok ? "Confident" : "Low confidence"}
       </p>
-      <p className="text-body text-ink">{reasonText(p, usedRegion(p))}</p>
-      {low && <TryRegionButton onClick={onTryRegion} />}
+      <div>
+        <h2 className="text-place font-semibold leading-tight text-ink">{placeLabel(search.places[0])}</h2>
+        <p className="flex items-center gap-1 text-sm text-ink-2">
+          {formatCoords(at)}
+          <CopyButton text={plainCoords(at)} />
+        </p>
+      </div>
+      <KeyValues
+        rows={[
+          ["Matched details", String(top.inliers ?? 0)],
+          ["Closest rival", rival ? `${rival.inliers ?? 0}, ${formatDistance(distanceM(top, rival))} away` : "None"],
+          ["Searched area", SEARCHED[p.searched_variant] ?? "Automatic"],
+          ["Reference", ref],
+          ["Time", `${total(search.timings).toFixed(1)} s`],
+        ]}
+      />
+      {!ok && <p className="text-sm text-unsure">Too few matching details to be sure. Compare before relying on it.</p>}
+      <div className="flex flex-wrap gap-1.5 pt-1">
+        <button type="button" onClick={onCompare} className="h-8 rounded-control bg-pin px-3 text-sm font-medium text-surface hover:bg-pin-hover">
+          Compare
+        </button>
+        {!ok && (
+          <button type="button" onClick={onTryRegion} className="h-8 rounded-control border border-rule-control px-3 text-sm text-ink hover:bg-paper">
+            Try a different region
+          </button>
+        )}
+      </div>
     </Section>
   );
 }
 
-function MobileResult({ search, onCompare, onTryRegion }: { search: Search; onCompare: () => void; onTryRegion: () => void }) {
+function Candidates({
+  search,
+  selected,
+  onSelect,
+  onCompare,
+  onVerdict,
+}: {
+  search: Search;
+  selected: number;
+  onSelect: (i: number) => void;
+  onCompare: (i: number) => void;
+  onVerdict: (imageId: string, v: Verdict | undefined) => void;
+}) {
   const p = search.prediction;
-  const at = { lat: p.predicted_lat, lng: p.predicted_lng };
+  const first = p.top_matches[0];
+  const most = Math.max(1, first?.inliers ?? 0);
   return (
-    <section className="flex flex-col gap-3 border-b border-rule px-5 py-4">
-      <div className="flex items-start gap-3">
-        <img src={search.url} alt="Your photo" className="size-touch shrink-0 object-cover" />
-        <div className="min-w-0">
-          <StateLine state={p.confidence_state} />
-          <h2 className="text-lg font-semibold text-ink">{placeLabel(search.places[0])}</h2>
-          <p className="text-sm text-ink-2">{formatCoords(at)}</p>
-        </div>
-      </div>
-      <p className="text-body text-ink">{reasonText(p, usedRegion(p))}</p>
-      <div className="flex gap-2">
-        <button type="button" onClick={onCompare} className="h-touch flex-[2] rounded-control bg-pin text-control font-medium text-surface hover:bg-pin-hover">
-          Compare with match
-        </button>
-        <CopyButton text={plainCoords(at)} tall />
-      </div>
-      {p.confidence_state !== "ok" && <TryRegionButton onClick={onTryRegion} />}
-    </section>
-  );
-}
-
-function Candidates({ search, selected, onSelect }: { search: Search; selected: number; onSelect: (i: number) => void }) {
-  const p = search.prediction;
-  const best = { lat: p.predicted_lat, lng: p.predicted_lng };
-  const rows = useMemo(
-    () => p.top_matches.slice(1).map((m, i) => ({ index: i + 1, match: m, place: search.places[i + 1] })),
-    [p, search.places],
-  );
-  if (!rows.length) return null;
-  return (
-    <Section title="Other candidates">
-      <ul className="-mx-5 flex flex-col">
-        {rows.map(({ index, match, place }) => (
-          <li key={match.image_id} className="border-b border-rule-list last:border-b-0">
-            <button
-              type="button"
-              aria-pressed={selected === index}
-              onClick={() => onSelect(index)}
-              className="grid w-full grid-cols-[1.5rem_1fr_auto] items-baseline gap-x-3 px-5 py-2.5 text-left hover:bg-paper aria-pressed:bg-selected"
-            >
-              <span className="text-sm font-semibold text-ink">{match.rank}</span>
-              <span className="min-w-0">
-                <span className="block truncate text-body font-medium text-ink">{placeLabel(place)}</span>
-                <span className="block text-sm text-ink-2">{formatDistance(distanceM(best, match))} from the best match</span>
-              </span>
-              <span className="text-sm text-ink-2">{match.inliers ?? 0} details</span>
-            </button>
-          </li>
-        ))}
+    <Section title="Candidates">
+      <ul className="-mx-3 flex flex-col">
+        {p.top_matches.map((m, i) => {
+          const details = m.inliers ?? 0;
+          return (
+            <li key={m.image_id} className={`flex items-center gap-2 px-3 py-1.5 ${selected === i ? "outline-2 -outline-offset-2 outline-pin" : ""}`}>
+              <button
+                type="button"
+                aria-pressed={selected === i}
+                onClick={() => onSelect(i)}
+                className="grid min-w-0 flex-1 grid-cols-[1rem_1fr_auto] items-center gap-x-2 text-left"
+              >
+                <span className="text-xs font-semibold text-ink">{m.rank}</span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium text-ink">{placeLabel(search.places[i])}</span>
+                  <span className="block text-xs text-ink-2">{i === 0 ? "Top match" : `${formatDistance(distanceM(first, m))} from #1`}</span>
+                </span>
+                <span className="flex items-center gap-1.5" title={`${details} matched details`}>
+                  <span className="text-sm text-ink">{details}</span>
+                  <span className="h-1 w-bar overflow-hidden rounded-square bg-rule-list" aria-hidden="true">
+                    <span className="block h-full bg-ink-2" style={{ width: `${Math.min(100, (100 * details) / most)}%` }} />
+                  </span>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onCompare(i)}
+                aria-label={`Compare with candidate ${m.rank}`}
+                title="Compare"
+                className="grid size-7 shrink-0 place-items-center rounded-control text-pin hover:bg-selected hover:text-pin-hover"
+              >
+                <IconSideBySide />
+              </button>
+              <VerdictControl value={search.verdicts[m.image_id]} onChange={(v) => onVerdict(m.image_id, v)} subject={`candidate ${m.rank}`} />
+            </li>
+          );
+        })}
       </ul>
     </Section>
   );
-}
-
-function CompareFor({ search, selected, tall }: { search: Search; selected: number; tall?: boolean }) {
-  const p = search.prediction;
-  const match = p.top_matches[selected] ?? p.top_matches[0];
-  if (!match) return null;
-  // "Your region" is the part of the photo whose match won (manual, crop or whole).
-  return <Compare photoUrl={search.url} region={p.searched_region ?? search.region} match={match} predicted={{ lat: p.predicted_lat, lng: p.predicted_lng }} tall={tall} />;
 }

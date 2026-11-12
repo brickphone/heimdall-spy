@@ -179,9 +179,8 @@ export default function PhotoRegion({ src, region, editing, searched, onChange, 
         />
       )}
       {failed && (
-        <p className="grid h-full place-items-center px-6 text-center text-sm text-ink-2">
-          This browser can&apos;t show HEIC photos, so the whole photo is searched. Safari can
-          show it, or choose a JPEG copy to select a region.
+        <p className="grid h-full place-items-center px-6 text-center text-xs text-ink-2">
+          No preview. The whole photo is searched.
         </p>
       )}
       {shown && (

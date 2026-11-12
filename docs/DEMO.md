@@ -25,45 +25,70 @@ Web development: `cd web && npm run dev` (hot reload on 127.0.0.1:3000, API stil
 Checks: `npm run typecheck && npm run lint && npm run check:tokens && npm run check:contrast`.
 End-to-end (with the demo running): `node scripts/e2e.mjs <expected.json>`.
 
-## What the page does ("Heimdall" workspace)
+## What the page does ("Heimdall" workspace, v2)
 
-A light, map-first workspace. All inference stays in FastAPI; the page calls only the
-public endpoints (`POST /predict/stream`, `GET /references/{id}/image`).
+The map is the workspace: it runs full-bleed under two floating panels, a 48 px rail on
+the left and a 380 px inspector on the right (each 12 px from the window edges, 1 px rule,
+6 px radius). On phones the inspector is a bottom sheet. All inference stays in FastAPI;
+the page calls only the public endpoints (`POST /analyze`, `POST /predict/stream`,
+`GET /references/{id}/image`).
 
 ### Flow: photo, region, then Locate
 
-1. **Choose or drop a photo:** use the button, or drop it anywhere on the map, which shows
-   a full-map "Drop to add photo" target. The photo appears with region selection active.
-   **Nothing is sent until Locate is pressed.**
-2. **Optionally drag a box** around the part that shows the place (keyboard: arrows move
-   it, Shift with arrows resizes). "Use whole photo" clears it.
-3. **Locate.** After a result, "Change region" lets you adjust the box and locate again.
+1. **Choose or drop a photo** (button, or anywhere on the map). The page calls
+   `/analyze`: if people cover more than 30%, the suggested region is pre-drawn with a note.
+   For HEIC, which Chrome cannot show, `/analyze` also returns an upright JPEG preview
+   (at most 1600 px, no metadata); the original file is what is searched, and region
+   coordinates refer to the same upright pixels. **Nothing is searched until Locate.**
+2. **Optionally drag a box** (arrows move it, Shift with arrows resizes); "Use whole photo"
+   clears it.
+3. **Locate.** After a result, the part of the photo whose match won is outlined as
+   "Searched area"; "Change region" lets you adjust and locate again.
+
+### The inspector after a result
+
+- **Result block:** state ("Confident" / "Low confidence"), place name, coordinates with a
+  copy button, then label–value rows: Matched details, Closest rival (details, distance),
+  Searched area (Whole photo / Your region / Automatic: …), Reference (source, year,
+  distance), Time. Low confidence adds one line: "Too few matching details to be sure.
+  Compare before relying on it." and a "Try a different region" button.
+- **Candidates:** rank, place, distance from #1, matched details with a bar relative to
+  #1, a compare button and a verdict control (Matches / Doesn't match / Unsure). Verdicts
+  are kept with the session's recent searches only, never sent to the server. The
+  selected row has a 2 px cobalt outline.
+- **Compare** (from the result block, a row or the map callout) opens a large overlay over
+  the map area: your searched area and the reference side by side, or a swipe view; the
+  credit line; the verdict control. Escape or the close button returns to the map.
+
+### The map
+
+- Light basemap with tonal depth (land, residential, buildings and 3D extrusions step
+  darker; white roads on darker casings). District labels 14 px, street labels 11 px; all
+  labels pass WCAG AA against their halos (`scripts/check-contrast.mjs`).
+- **Only the selected result has contour rings:** three solid rings, cobalt when
+  confident, amber when not. Other candidates are 20 px numbered squares. Markers never
+  overlap each other, the pin or the callout: a crowded square moves to the nearest free
+  slot and a thin leader points back to its true position (`src/lib/markers.ts`).
+- The callout shows only the place name and "Compare". Controls (zoom, reset north,
+  2D/3D) sit bottom-right, left of the inspector. The camera keeps results in the visible
+  area between the panels.
 
 ### The locating sequence (the map is the loading state)
 
-Driven by the streamed pipeline events, not by timers. Each phase holds a minimum time so
+Driven by the streamed pipeline events, not by timers; each phase holds a minimum time so
 fast answers still read clearly.
 
 | Event from `/predict/stream` | Map | Inspector |
 | --- | --- | --- |
-| Locate pressed (min 900 ms) | Dims (paper at 55%, soft vignette); frames the Linköping polygon, tilts to 35°, rotates about 4°/s. Centre label "Searching Linköping" with Cancel | Stage list: "Search reference photos" running |
-| `candidates` (top 50) | Rotation continues; 50 dots fade in, strongest first, over ~600 ms. Label: "Comparing the 5 closest matches" | Search done (seconds); "Compare closest matches" running |
-| `stage: verification` | Rotation stops; ~1.2 s flight to the top 5; the other 45 dots fade out; wide dashed rings | |
-| `verified` × 5 | Each candidate's rings ease to their final radius (500 ms): tight for strong matches, wide for weak | |
-| `result` | Dim lifts; flight to the best match at zoom 16, pitch 45°, 3D buildings; prediction rings draw in, inner to outer; callout fades in | Sections fill; the stage list collapses to "Located in 4.1 s" (expand for per-stage times) |
+| Locate pressed (min 900 ms) | Dims (paper at 55%); frames the Linköping polygon, tilts to 35°, rotates about 4°/s. Centre label "Searching Linköping" with Cancel | Stage list: "Search references" running |
+| `candidates` (top 50) | 50 dots fade in, strongest first. Label: "Comparing the 5 closest matches" | Search done (seconds) |
+| `stage: verification` | Rotation stops; flight to the top 5; the other 45 dots fade out; dashed rings | |
+| `verified` × 5 | Each candidate's rings ease to a radius set by its matched details | |
+| `result` | Dim lifts. Confident: zoom 16, pitch 45°, 3D buildings. Low confidence: all 5 in view, flat, amber pin. The selected result's rings draw in; callout | Result block, candidates |
 
-- **Cancel:** aborts the request, which stops the work on the server; lifts the dim;
-  returns the camera; keeps the photo and region.
-- **Errors:** the label becomes the message plus "Try again".
-- **Reduced motion:** no flights or rotation (camera jumps), states crossfade, rings
-  appear at their final size.
-- **Candidate selection after the result:** flies between candidates at pitch 45° in
-  ~800 ms.
-
-**Reference coverage** is no longer in the workspace. It's a static, non-interactive map
-on `/about` with a sentence explaining it. The workspace never requests coverage or
-gallery points; the only reference image it loads is the matched one, in the compare
-view after a result.
+Cancel, errors and reduced motion behave as before: Cancel stops the server work and
+keeps the photo and region; errors are one line with "Try again"; reduced motion jumps
+instead of flying.
 
 ### Streaming API
 
@@ -95,60 +120,42 @@ How it's built and verified:
   `eval/results/dev_historic_rerank.json` at build time; the coverage map; failure modes
   with a real manual-crop example; data and licences.
 
-### Checks (2026-11-11)
+### Checks (v2, 2026-11-11)
+
+Run against a production build of the v2 UI (`web/scripts/e2e-v2.mjs`, Chrome via
+playwright-core). The API is mocked, so every state is deterministic. The HEIC check uses
+the real `/analyze` decode-and-preview code (API in test mode, no model) with the
+synthetic fixture `tests/fixtures/pattern.heic`.
 
 | Check | Result |
 | --- | --- |
-| Python suites | 173 + 178 passed |
-| Stream tests | order and schema; same result as `/predict`; disconnect cancels work (`tests/integration/test_predict_stream.py`) |
-| Real model, 3 dev photos | stream result = `/predict`, exactly |
-| Playwright (`web/scripts/e2e.mjs`), 1440×900 and 390×844 | 32 / 33 |
-| Nothing sent before Locate; region active by default; drawn region sent | pass |
-| Status label follows the stream; "Located in …" with stage timings | pass |
-| API-equals: UI top 5, details and state = eval, 3 dev photos | pass |
-| Cancel mid-verification (photo and region kept, Locate offered); error label with Try again | pass |
-| Network: no coverage or gallery-point requests in the workspace | pass |
-| Keyboard; focus ring 2 px cobalt, 2 px offset; contrast; tokens; type check; lint | pass |
-| **Frame budget: no long task > 100 ms** | **Not fully met**, see below |
+| Layout: full-bleed map; rail 48 px and inspector 380 px at 12 px insets; controls bottom-right left of the inspector; no "Linköping" label | pass |
+| Result block: the five label–value rows, rival with a comma, searched area named, no prose; type 18 / 13 / 12 px | pass |
+| Candidates: 5 rows, verdict toggles, selected row has a 2 px outline (no fill) | pass |
+| Compare overlay over the map area (not the inspector), labels, verdict, swipe mode, Escape closes | pass |
+| Low confidence: one amber line, flat overview, amber pin | pass |
+| **Markers: 5 candidates within 50 m, no overlapping markers** (two zoom levels), and spread candidates | pass |
+| Mobile 390×844: no horizontal scroll; Compare is the first result button | pass |
+| HEIC in Chromium: preview shown, region drawn on it | pass |
+| Total | **35 / 35** |
+| Contrast (all UI text, map labels against their halos, map marks), tokens (colours, radii, font sizes), type check, lint | pass |
 
-**Frame budget on the M1.**
-- With screenshots off, most runs have no long task at all. About 1 run in 9 has a single
-  frame of 109–181 ms, always while the API is still computing.
-- The API's feature extractor (ALIKED) runs on the same Apple GPU that renders the map, so
-  that is likely contention, though not proven.
-- Seen once: one 95 ms frame at Locate, when the tilted camera loads many tiles.
-- Hiding labels while the map is dimmed did not remove the slow frames; the label hiding
-  was kept.
-- Moving verification to the CPU would avoid the overlap but makes that step about 4×
-  slower.
+Not re-run for v2: the real-model checks of the previous UI (`scripts/e2e.mjs`,
+`scripts/e2e-regions.mjs`) still use v1 selectors and need updating.
 
-### Screenshots
-
-**Locating sequence** (1440×900, fixed times after Locate):
+### Screenshots (v2)
 
 | | |
 | --- | --- |
-| ![](screenshots/sequence-01-0.3s.png) 0.3 s | ![](screenshots/sequence-02-0.9s.png) 0.9 s |
-| ![](screenshots/sequence-03-1.5s.png) 1.5 s | ![](screenshots/sequence-04-2.1s.png) 2.1 s |
-| ![](screenshots/sequence-05-2.7s.png) 2.7 s | ![](screenshots/sequence-06-3.3s.png) 3.3 s |
-| ![](screenshots/sequence-07-4.0s.png) 4.0 s | ![](screenshots/sequence-08-4.8s.png) 4.8 s |
-| ![](screenshots/sequence-09-5.8s.png) 5.8 s | ![](screenshots/sequence-10-7.5s.png) 7.5 s |
-
-**Other states:**
-
-| | |
-| --- | --- |
-| Empty state (polygon outline, no coverage) | ![](screenshots/desktop-1-empty.png) |
-| Photo chosen, region active, Locate | ![](screenshots/desktop-2-ready.png) |
-| Result | ![](screenshots/desktop-3-result.png) |
-| Result with a drawn region | ![](screenshots/desktop-4-region-result.png) |
-| Candidate 3 selected | ![](screenshots/desktop-5-candidate3.png) |
-| Compare | ![](screenshots/desktop-6-compare.png) |
-| Cancel during verification: before / after | ![](screenshots/cancel-1-before.png) ![](screenshots/cancel-2-after.png) |
-| Error | ![](screenshots/error.png) |
-| Reduced motion | ![](screenshots/reduced-1.png) ![](screenshots/reduced-2.png) ![](screenshots/reduced-3-result.png) |
-| About, with the coverage map | ![](screenshots/desktop-7-about.png) |
-| Mobile 390×844 | ![](screenshots/mobile-1-empty.png) ![](screenshots/mobile-2-result.png) ![](screenshots/mobile-3-compare.png) |
+| Empty | ![](screenshots/v2-desktop-1-empty.png) |
+| Locating | ![](screenshots/v2-desktop-2-locating.png) |
+| Confident | ![](screenshots/v2-desktop-3-confident.png) |
+| Compare, side by side | ![](screenshots/v2-desktop-4-compare.png) |
+| Compare, swipe | ![](screenshots/v2-desktop-5-compare-swipe.png) |
+| Low confidence | ![](screenshots/v2-desktop-6-low.png) |
+| 5 candidates within 50 m (markers offset, leaders to true positions) | ![](screenshots/v2-desktop-7-cluster.png) |
+| HEIC in Chromium, region drawn on the preview | ![](screenshots/v2-desktop-8-heic-region.png) |
+| Mobile 390×844: empty, confident, compare | ![](screenshots/v2-mobile-1-empty.png) ![](screenshots/v2-mobile-2-confident.png) ![](screenshots/v2-mobile-3-compare.png) |
 
 ## Privacy
 

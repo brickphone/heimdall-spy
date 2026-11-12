@@ -10,7 +10,7 @@ const familjen = Familjen_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Heimdall",
+  title: "SweSpy",
   description: "Find where a photo taken in Linköping was taken, with an honest confidence state.",
 };
 

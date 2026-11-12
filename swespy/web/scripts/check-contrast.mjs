@@ -18,7 +18,7 @@ function ratio(a, b) {
   return (l1 + 0.05) / (l2 + 0.05);
 }
 
-// [foreground, background, minimum, where]
+// [foreground, background, minimum, where]. Map labels are checked against their halo colour.
 const PAIRS = [
   ["ink", "surface", 4.5, "body text on panels"],
   ["ink", "paper", 4.5, "text on the app background"],
@@ -33,12 +33,20 @@ const PAIRS = [
   ["pin-hover", "surface", 4.5, "hovered links"],
   ["surface", "pin", 4.5, "primary button text"],
   ["surface", "pin-hover", 4.5, "primary button text, hover"],
-  ["surface", "ink", 4.5, "pressed toggles and tooltips"],
+  ["surface", "ink", 4.5, "pressed toggles, Unsure verdict and tooltips"],
+  ["surface", "sure", 4.5, "Matches verdict, pressed"],
+  ["surface", "danger", 4.5, "Doesnt match verdict, pressed"],
+  ["ink-2", "rule-list", 4.5, "secondary text on photo placeholders"],
   ["pin", "selected", 4.5, "selected candidate square on the map"],
-  ["ink-map", "map-land", 4.5, "district names and scale bar on the map"],
+  ["map-label", "map-land", 4.5, "district names (14 px, on a land halo)"],
+  ["map-label", "map-landuse", 4.5, "district names over residential areas"],
+  ["ink-map", "map-land", 4.5, "scale bar on the map"],
   ["ink-map", "surface", 4.5, "attribution on the map"],
   ["map-street-label", "map-road", 4.5, "street names (white halo on white roads)"],
-  ["map-water-label", "map-land", 4.5, "water names (12 px italic, on a paper halo)"],
+  ["map-water-label", "map-land", 4.5, "water names (12 px italic, on a land halo)"],
+  ["unsure", "map-land", 3.0, "low-confidence pin and rings on the map (non-text)"],
+  ["pin", "map-land", 3.0, "prediction pin and rings on the map (non-text)"],
+  ["ink", "map-land", 3.0, "candidate square borders on the map (non-text)"],
   ["sure", "surface", 3.0, "Confident state square (non-text)"],
   ["unsure", "surface", 3.0, "Low confidence state square (non-text)"],
   ["pin", "surface", 3.0, "focus ring (non-text)"],

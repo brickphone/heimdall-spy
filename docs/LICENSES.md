@@ -49,6 +49,7 @@ This is an engineering audit, not legal advice. **Rule:** a component marked *No
 | OpenMapTiles schema (tile layout) | CC BY 4.0 (schema), BSD-3 (code) | Yes, with attribution | Credited on the map ("© OpenMapTiles") | [openmaptiles.org](https://openmaptiles.org/) |
 | OpenStreetMap data (map, street and district names) | ODbL 1.0 | Yes, with attribution | "© OpenStreetMap contributors" on the map and About page | [osm.org/copyright](https://www.openstreetmap.org/copyright) |
 | Radix UI primitives (dialog, tooltip, toggle), unstyled | MIT | Yes | In use | [radix-ui/primitives](https://github.com/radix-ui/primitives) |
+| IBM Carbon icons, `@carbon/icons-react` 11.92.0 | Apache-2.0 | Yes | In use (all UI icons, 16 px; only the logo mark is our own) | [carbon-design-system/carbon](https://github.com/carbon-design-system/carbon/tree/main/packages/icons-react) |
 | Familjen Grotesk (via `next/font`, self-hosted at build) | SIL OFL 1.1 | Yes | In use (UI type) | [Google Fonts](https://fonts.google.com/specimen/Familjen+Grotesk) |
 | Noto Sans (map label glyphs from OpenFreeMap) | SIL OFL 1.1 | Yes | In use inside the map canvas only | [notofonts](https://github.com/notofonts) |
 | playwright-core 1.65 (dev only, drives the installed Chrome) | Apache-2.0 | Yes | Tests only | [microsoft/playwright](https://github.com/microsoft/playwright) |

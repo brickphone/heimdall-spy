@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /*
- * Heimdall design tokens: the only place colours, type sizes, radii and fixed sizes are
+ * SweSpy design tokens: the only place colours, type sizes, radii and fixed sizes are
  * defined. Components use these through Tailwind classes (bg-paper, text-ink-2,
  * rounded-control, w-rail, ...) or var(--…); scripts/check-tokens.mjs fails on any
  * hex colour or px radius outside this file. `static` keeps every token in the CSS,
@@ -26,34 +26,36 @@
   --color-scrim: rgb(22 33 44 / 0.45);
   --color-transparent: transparent;
 
-  /* Map style (read by src/lib/mapStyle.ts). */
-  --color-map-land: #f3f5f4;
-  --color-map-landuse: #ecefee;
-  --color-map-park: #e2ebe4;
-  --color-map-forest: #d9e4db;
-  --color-map-water: #cadbe1;
+  /* Map style (read by src/lib/mapStyle.ts). Light, with tonal depth: land, then
+     residential, then buildings step darker; roads stay white on darker casings. */
+  --color-map-land: #e9eceb;
+  --color-map-landuse: #e3e7e5;
+  --color-map-park: #d9e5db;
+  --color-map-forest: #d2dfd5;
+  --color-map-water: #bed3db;
   --color-map-road: #ffffff;
-  --color-map-minor-casing: #d2d9d7;
-  --color-map-major-casing: #bcc6c4;
-  --color-map-path: #aab5b3;
-  --color-map-building: #dfe4e2;
-  --color-map-building-line: #c8d0ce;
-  --color-map-rail: #9da8a6;
-  --color-map-label: #46535d;
-  --color-map-street-label: #6a7880;
-  --color-map-water-label: #4f6e7a;
-  --color-map-building-side: #e3e8e6;
-  --color-map-building-top: #d5dcda;
+  --color-map-minor-casing: #cfd6d4;
+  --color-map-major-casing: #b3bdbb;
+  --color-map-path: #a3afad;
+  --color-map-building: #d6dcda;
+  --color-map-building-line: #c3cbc9;
+  --color-map-rail: #96a2a0;
+  --color-map-label: #3b4750;
+  --color-map-street-label: #56636b;
+  --color-map-water-label: #3f5f6b;
+  --color-map-building-side: #cdd4d2;
+  --color-map-building-top: #dee3e1;
 
   --font-sans: var(--font-familjen), ui-sans-serif, system-ui, sans-serif;
 
   --text-*: initial;
   --text-map: 11px;
   --text-xs: 12px;
-  --text-sm: 13px;
+  --text-sm: 13px; /* Workspace base text. */
   --text-control: 14px;
   --text-body: 15px;
   --text-md: 16px;
+  --text-place: 18px; /* The place name in the result block. */
   --text-lg: 22px;
   --text-xl: 28px;
   --text-xl--letter-spacing: -0.01em;
@@ -63,12 +65,17 @@
   --radius-control: 4px;
   --radius-square: 2px;
   --radius-sheet: 10px;
+  --radius-panel: 6px; /* Floating rail, inspector, map controls, overlay. */
   --radius-dot: 50%;
 
-  --spacing-rail: 56px;
-  --spacing-inspector: 420px;
-  --spacing-photo: 276px;
+  --spacing-rail: 48px;
+  --spacing-inspector: 380px;
+  --spacing-inset: 12px; /* Gap between floating panels and the window edge. */
+  --spacing-photo: 176px;
   --spacing-compare: 240px;
+  --spacing-bar: 40px; /* Matched-details bar in candidate rows. */
+  --spacing-control: 32px; /* Map control buttons. */
+  --spacing-sheet: 58dvh; /* Mobile inspector sheet, maximum height. */
   --spacing-touch: 44px;
   --spacing-handle: 30px;
   --spacing-map-mobile: 430px;
@@ -88,8 +95,12 @@
   --ring-3: 0.9px;
   --pin-size: 11px;
   --pin-halo: 2.5px;
-  --square-size: 18px;
+  --square-size: 20px;
+  --square-border: 1.2px;
+  --leader-width: 1px;
   --callout-border: 0.9px;
+  --shadow-panel: 0 1px 2px color-mix(in srgb, var(--color-ink) 6%, transparent);
+  --ring-width: 1.5px; /* Selected candidate's contour rings. */
   --divider-width: 2px;
   --halo-district: 3.5px;
   --icon-stroke: 1.4;

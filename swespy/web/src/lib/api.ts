@@ -44,6 +44,7 @@ export interface Analysis {
   person_share: number | null;
   suggested_region: Region | null;
   suggest: boolean; // People cover more than 30% of the photo.
+  preview: string | null; // Upright JPEG data URL, for browsers that cannot show the file.
 }
 
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // Same limit as the API and its proxy.

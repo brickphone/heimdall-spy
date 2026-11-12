@@ -7,6 +7,8 @@ const apiUrl = process.env.SWESPY_API_URL ?? "http://127.0.0.1:8000";
 const nextConfig: NextConfig = {
   // Long-running Node server (`node server.js`); no serverless functions.
   output: "standalone",
+  // A separate build folder (e.g. for a preview next to a running demo); default .next.
+  distDir: process.env.NEXT_DIST_DIR ?? ".next",
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

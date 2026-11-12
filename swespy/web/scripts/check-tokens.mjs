@@ -1,5 +1,6 @@
-// Fails if a hex colour, an rgb()/hsl() colour or a px border radius appears outside the
-// token file (src/app/globals.css). Generated data and the token file are exempt.
+// Fails if a hex colour, an rgb()/hsl() colour, a px border radius or a literal font size
+// appears outside the token file (src/app/globals.css). Generated data and the token file
+// are exempt.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +12,9 @@ const RULES = [
   [/\b(rgb|rgba|hsl|hsla)\(/g, "colour function"],
   [/border-radius\s*:\s*[0-9.]+px/g, "px border radius"],
   [/rounded-\[[0-9.]+px\]/g, "px border radius"],
+  [/text-\[[0-9.]+(px|rem|em)\]/g, "off-token font size"],
+  [/font-size\s*:\s*[0-9.]+(px|rem|em)/g, "off-token font size"],
+  [/font:\s*[0-9]{3}\s+[0-9.]+(px|rem)/g, "off-token font size"],
 ];
 
 function* files(dir) {
@@ -34,4 +38,4 @@ if (problems.length) {
   console.error(`Off-token values found:\n${problems.join("\n")}`);
   process.exit(1);
 }
-console.log("Token check: no hex colours, colour functions or px radii outside globals.css.");
+console.log("Token check: no hex colours, colour functions, px radii or font sizes outside globals.css.");

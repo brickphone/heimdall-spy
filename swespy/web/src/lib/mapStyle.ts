@@ -16,7 +16,7 @@ export function token(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
-const px = (name: string): number => parseFloat(token(name));
+export const px = (name: string): number => parseFloat(token(name));
 
 const byZoom = (z1: number, v1: number, z2: number, v2: number): ExpressionSpecification => [
   "interpolate",
@@ -34,7 +34,10 @@ const PATHS = ["path", "track"];
 
 export function mapStyle(): StyleSpecification {
   const c = (n: string) => token(`--color-map-${n}`);
-  const paper = token("--color-paper");
+  // Label halos use the land colour, so contrast is checked label-on-land
+  // (scripts/check-contrast.mjs). The tile host has no medium weight; districts use
+  // Regular at 14 px in the darkest label ink.
+  const halo = c("land");
   const font = ["Noto Sans Regular"];
   return {
     version: 8,
@@ -220,7 +223,7 @@ export function mapStyle(): StyleSpecification {
         },
         paint: {
           "text-color": c("water-label"),
-          "text-halo-color": paper, // Read against paper, so the label meets 4.5:1.
+          "text-halo-color": halo,
           "text-halo-width": 1.5,
         },
       },
@@ -233,12 +236,12 @@ export function mapStyle(): StyleSpecification {
         layout: {
           "text-field": ["get", "name"],
           "text-font": font,
-          "text-size": px("--text-body"),
+          "text-size": px("--text-control"),
           "text-padding": 6,
         },
         paint: {
           "text-color": c("label"),
-          "text-halo-color": paper,
+          "text-halo-color": halo,
           "text-halo-width": px("--halo-district"),
         },
       },
